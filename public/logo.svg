@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- خلفية الدرع (Blue) -->
+  <path d="M50 5 L90 25 V50 C90 75 50 95 50 95 C50 95 10 75 10 50 V25 L50 5Z" fill="#0ea5e9"/>
+  
+  <!-- ظل خفيف للدرع -->
+  <path d="M50 95 C50 95 10 75 10 50 V25 L50 5 V95Z" fill="#0284c7"/>
+
+  <!-- قبعة التخرج (White) -->
+  <path d="M50 30 L75 40 L50 50 L25 40 L50 30Z" fill="white"/>
+  <rect x="48" y="45" width="4" height="10" fill="white"/>
+  <path d="M30 40 V45 C30 55 40 60 50 60 C60 60 70 55 70 45 V40" stroke="white" stroke-width="3" fill="none"/>
+  
+  <!-- اللمعة (Sparkle) -->
+  <path d="M70 25 L72 30 L77 30 L73 34 L75 39 L70 36 L65 39 L67 34 L63 30 L68 30 Z" fill="#fbbf24"/>
+</svg>
