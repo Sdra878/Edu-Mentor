@@ -6,7 +6,7 @@ import {
   BookOpen, User, Briefcase, Award, Play, CheckCircle, 
   Upload, Brain, Moon, Sun, Camera, MapPin, 
   GraduationCap, Mail, Calendar, Phone, Globe, FileText, 
-  Edit3, X, Save, Map as MapPinIcon, Search, Plus
+  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -15,16 +15,43 @@ export const StudentDashboard = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
   
-  // حالة التعديل
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   
-  // --- States الجديدة للبحث والتسجيل ---
+  // States للبحث والتسجيل
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [activeEnrollments, setActiveEnrollments] = useState([]); // الكورسات النشطة (قيد التقدم)
+  const [activeEnrollments, setActiveEnrollments] = useState([]); 
+  
+  // --- State: الوظائف والملف ---
+  const [approvedInternships, setApprovedInternships] = useState([]);
+  const [cvFile, setCvFile] = useState(null); 
+  
+  // --- EXAMS STATES ---
+  // ملاحظة: هنا نضع بيانات وهمية للعرض في القائمة، ولكن عند الضغط سنقوم بالجلب من الباك إند
+  const [exams, setExams] = useState([
+      // يمكنك إضافة الـ ID الخاص بالامتحان الذي أنشأته في لوحة المعلم هنا لتجربته
+      // مثال: { id: "YOUR_EXAM_ID_FROM_DB", title: 'Exam from Backend', questions: [] }
+      { 
+          id: 1, 
+          title: 'React Basics Quiz (Mock)', 
+          questions: [
+              { text: 'What is React?', options: ['Library', 'Framework', 'Language', 'Database'], correctIndex: 0 },
+              { text: 'What is JSX?', options: ['JS XML', 'Java XML', 'JSON', 'None'], correctIndex: 0 }
+          ]
+      }
+  ]); 
+  const [currentExam, setCurrentExam] = useState(null); 
+  const [examAnswers, setExamAnswers] = useState({});
+  
+  // --- CERTIFICATE STATE ---
+  const [certificateModal, setCertificateModal] = useState(null); 
+  
+  // --- NEW: WORKSHOPS STATES ---
+  const [workshops, setWorkshops] = useState([]);
+  const [registeredWorkshops, setRegisteredWorkshops] = useState([]);
   
   // Data States
-  const [enrollments, setEnrollments] = useState([]); // الكورسات المكتملة (السيرة الذاتية)
+  const [enrollments, setEnrollments] = useState([]); 
   const [interests, setInterests] = useState([]);
   const [apps, setApps] = useState([]);
   
@@ -43,7 +70,7 @@ export const StudentDashboard = () => {
   const [trainingData, setTrainingData] = useState({ company: '', cv: '' });
   const [testScore, setTestScore] = useState(null);
 
-  // === 1. جلب البيانات من الباك إند ===
+  // === 1. جلب البيانات ===
   useEffect(() => {
     if (!user) return;
     
@@ -55,45 +82,77 @@ export const StudentDashboard = () => {
         setLoading(false);
         return;
       }
-
+  
       try {
-        // أ) جلب الكورسات المكتملة (My CV)
+        const safeParse = async (res) => {
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                const text = await res.text();
+                console.error("Non-JSON Response received:", text);
+                return null;
+            }
+            return await res.json();
+        };
+
+        // أ) جلب الكورسات المكتملة (My CV) - هون رح تظهر الشهادات
         const cvRes = await fetch('http://localhost:5000/api/students/cv', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(cvRes.ok) {
-          const cvData = await cvRes.json();
-          setEnrollments(cvData);
+          const cvData = await safeParse(cvRes);
+          if(cvData) setEnrollments(cvData);
+        } else {
+            console.error("CV Fetch Error:", cvRes.statusText);
+            // Mock Data للتجربة
+            setEnrollments([
+                { _id: 101, completed_at: new Date(), course: { _id: 1, title: 'Full Stack Development', teacher: { name: 'Dr. Ahmad' }, duration_hours: 40, category: 'Programming' } }
+            ]);
         }
-
-        // ب) جلب الكورسات النشطة (My Active Enrollments)
+  
+        // ب) جلب الكورسات النشطة
         const enrollRes = await fetch('http://localhost:5000/api/enrollments/my', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(enrollRes.ok) {
-          const enrollData = await enrollRes.json();
-          setActiveEnrollments(enrollData);
+          const enrollData = await safeParse(enrollRes);
+          if(enrollData) setActiveEnrollments(enrollData);
+        }
+  
+        // ج) جلب الوظائف
+        const intRes = await fetch('http://localhost:5000/api/internships', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if(intRes.ok) {
+            const allInternships = await safeParse(intRes);
+            if(allInternships) {
+                setApprovedInternships(allInternships.filter(i => i.approval_status === 'approved'));
+            }
         }
 
-        // تعبئة البيانات الافتراضية
+        // --- NEW: MOCK WORKSHOPS ---
+        setWorkshops([
+            { id: 1, title: 'Advanced React Patterns', date: '2023-11-15', location: 'Online', capacity: 50, enrolled: 12 },
+            { id: 2, title: 'Cyber Security Basics', date: '2023-11-20', location: 'Room 101', capacity: 30, enrolled: 5 }
+        ]);
+  
         setProfileData({
-          name: user?.name || '',
-          bio: '',
-          university: '',
-          phone: '',
-          country: '',
-          level: '',
-          gradYear: '',
-          dob: ''
+            name: user?.name || 'Student Name',
+            bio: '',
+            university: '',
+            phone: '',
+            country: 'Jordan',
+            level: '',
+            gradYear: '',
+            dob: ''
         });
-
+  
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
         setLoading(false);
       }
     };
-
+  
     loadData();
   }, [user?.id]);
 
@@ -115,8 +174,13 @@ export const StudentDashboard = () => {
       if (res.ok) {
         alert("Profile Updated Successfully!");
         setIsEditingProfile(false);
-      } else { alert("Error updating profile"); }
-    } catch (error) { console.error(error); alert("Server Error"); }
+      } else { 
+        alert("Error updating profile"); 
+      }
+    } catch (error) { 
+      console.error(error); 
+      alert("Server Error"); 
+    }
   };
 
   // === 3. البحث عن كورس ===
@@ -124,13 +188,11 @@ export const StudentDashboard = () => {
     if (!searchTerm) return;
     try {
       const token = localStorage.getItem('token');
-      // البحث في الكورسات العامة
       const res = await fetch(`http://localhost:5000/api/courses?title=${searchTerm}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       
-      // فلترة النتائج
       const enrolledIds = activeEnrollments.map(e => e.course._id);
       const completedIds = enrollments.map(c => c.course._id);
       
@@ -138,7 +200,6 @@ export const StudentDashboard = () => {
         !enrolledIds.includes(c._id) && !completedIds.includes(c._id)
       );
 
-      // فلترة إضافية في الفرونت
       available = available.filter(c => 
         c.title.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -146,6 +207,7 @@ export const StudentDashboard = () => {
       setSearchResults(available);
     } catch (error) {
       console.error(error);
+      alert("Error searching courses");
     }
   };
 
@@ -159,57 +221,39 @@ export const StudentDashboard = () => {
       });
 
       if (res.ok) {
-        const newEnrollment = await res.json();
+        const contentType = res.headers.get("content-type");
+        let newEnrollment = {};
+        
+        if (contentType && contentType.includes("application/json")) {
+            newEnrollment = await res.json();
+        }
+        
         alert("Enrolled Successfully!");
         setSearchResults(searchResults.filter(c => c._id !== courseId));
         setActiveEnrollments([...activeEnrollments, newEnrollment]);
       } else {
-        const errData = await res.json();
-        alert(errData.message || "Failed to enroll");
+        const errorText = await res.text();
+        console.error("Enroll Error:", errorText);
+        alert(`Failed to enroll: ${res.statusText}`);
       }
     } catch (error) {
       console.error(error);
       alert("Server Error");
     }
   };
-
-  // === 5. تحديث التقدم ===
-  const handleUpdateProgress = async (enrollmentId, currentProgress) => {
-    const newProgress = Math.min(100, (currentProgress || 0) + 25);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/enrollments/${enrollmentId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ progress: newProgress })
-      });
-
-      if (res.ok) {
-        const updated = await res.json();
-        setActiveEnrollments(activeEnrollments.map(e => 
-          e._id === enrollmentId ? updated : e
-        ));
-        
-        if (newProgress >= 100) {
-           alert("Course Completed! Added to your CV.");
-           window.location.reload(); 
-        } else {
-          alert(`Progress updated to ${newProgress}%`);
-        }
-      }
-    } catch (error) {
-      console.error(error);
+  
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setCvFile(e.target.files[0]);
     }
   };
 
-  // === التعديل الرئيسي: دالة تقديم طلب التدريب (تم تعديل الرابط للجمع) ===
-  const handleApply = async (e) => {
-    e.preventDefault();
-    
-    if (!trainingData.company) {
+  // === 5. تقديم طلب تدريب ===
+  const handleApply = async (e, companyIdOverride = null) => {
+    if (e) e.preventDefault();
+    const targetCompanyId = companyIdOverride || trainingData.company;
+
+    if (!targetCompanyId) {
       alert("Please enter a company ID or Name");
       return;
     }
@@ -217,29 +261,31 @@ export const StudentDashboard = () => {
     const token = localStorage.getItem('token');
 
     try {
-      // تم التعديل: استخدام /api/applications/apply (بالجمع)
+      const formData = new FormData();
+      formData.append('companyId', targetCompanyId);
+      
+      if (cvFile) {
+          formData.append('cv', cvFile);
+      }
+
       const res = await fetch('http://localhost:5000/api/applications/apply', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          companyId: trainingData.company 
-        })
+        body: formData 
       });
 
       if (res.ok) {
         const result = await res.json();
         alert("Application Sent Successfully!");
         
-        // تفريغ الحقول
         setTrainingData({ company: '', cv: '' });
+        setCvFile(null); 
         
-        // تحديث قائمة الطلبات المحلية
         setApps([...apps, {
           id: result._id || Date.now(), 
-          companyName: trainingData.company, 
+          companyName: targetCompanyId, 
           status: 'pending', 
           date: new Date()
         }]);
@@ -253,20 +299,95 @@ export const StudentDashboard = () => {
     }
   };
 
-  // الوظائف الأخرى
+  // === EXAM HANDLERS (Connected to Backend) ===
+  const startExam = async (exam) => {
+      const token = localStorage.getItem('token');
+      
+      try {
+          // التحقق هل الامتحان حقيقي من الباك إند أم وهمي
+          // إذا كان الـ ID طويل (MongoDB ID) سنقوم بالجلب، وإلا سنستخدم البيانات المحلية
+          if (exam.id && typeof exam.id === 'string' && exam.id.length > 5) {
+              const res = await fetch(`http://localhost:5000/api/exams/${exam.id}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+
+              if (res.ok) {
+                  const data = await res.json();
+                  
+                  // تحويل البيانات القادمة من الباك إند لتناسب شكل الواجهة الأمامية
+                  const formattedExam = {
+                      id: data.exam._id,
+                      title: data.exam.title,
+                      questions: data.questions.map(q => ({
+                          text: q.text,
+                          options: q.options,
+                          // الباك إند يعيد correct_answer كنص، نحتاج لإيجاد رقمه (index)
+                          correctIndex: q.options.indexOf(q.correct_answer) 
+                      }))
+                  };
+                  setCurrentExam(formattedExam);
+                  setExamAnswers({});
+              } else {
+                  alert("Failed to load exam questions.");
+              }
+          } else {
+              // بيانات وهمية محلية
+              setCurrentExam(exam);
+              setExamAnswers({});
+          }
+      } catch (error) {
+          console.error("Error fetching exam:", error);
+          alert("Server Error: Could not connect to backend.");
+      }
+  };
+
+  const handleAnswerChange = (questionIndex, optionIndex) => {
+      setExamAnswers({
+          ...examAnswers,
+          [questionIndex]: optionIndex
+      });
+  };
+
+  const submitExam = () => {
+      let correctCount = 0;
+      currentExam.questions.forEach((q, idx) => {
+          if (examAnswers[idx] === q.correctIndex) {
+              correctCount++;
+          }
+      });
+      const score = Math.round((correctCount / currentExam.questions.length) * 100);
+      
+      alert(`Exam Submitted! Your Score: ${score}%`);
+      setCurrentExam(null);
+      
+      // إزالة الامتحان من القائمة (للتجربة فقط)
+      setExams(exams.filter(e => e.id !== currentExam.id));
+  };
+
+  // --- NEW: WORKSHOP REGISTRATION HANDLER ---
+  const handleRegisterWorkshop = (workshopId) => {
+      if(registeredWorkshops.includes(workshopId)) return;
+      setRegisteredWorkshops([...registeredWorkshops, workshopId]);
+      
+      // Update enrolled count locally (mock update)
+      setWorkshops(workshops.map(w => w.id === workshopId ? {...w, enrolled: w.enrolled + 1} : w));
+      alert("Registered Successfully!");
+  };
+
+  // === CERTIFICATE HANDLER ===
+  const handlePrintCertificate = () => {
+      window.print();
+  };
+
   const handleInterestToggle = (interest) => {
     setInterests(interests.includes(interest) ? interests.filter(i => i !== interest) : [...interests, interest]);
   };
 
   const interestOptions = ['Web Development', 'AI', 'Data Science', 'UI/UX', 'Cyber Security'];
 
-  // Dark Mode Effect
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (darkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
   const TabButton = ({ id, label, icon: Icon }) => (
@@ -292,8 +413,36 @@ export const StudentDashboard = () => {
   return (
     <div className={`relative z-0 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
       
+      {/* Print Styles for Certificate */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #certificate-print-area, #certificate-print-area * {
+            visibility: visible;
+          }
+          #certificate-print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            background: white;
+            margin: 0;
+            padding: 0;
+            border: none;
+            box-shadow: none;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       {/* Header */}
-      <div className=" ">
+      <div className="no-print">
       <header className="flex justify-between items-center py-8 px-6">
             <div className="text-left">
               <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -313,13 +462,16 @@ export const StudentDashboard = () => {
       </div>
 
       {/* Full Width Navigation Bar */}
-      <div className={`flex overflow-x-auto border-b gap-2 rounded-t-xl px-2 shadow-sm mb-8 mx-6 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+      <div className={`flex overflow-x-auto border-b gap-2 rounded-t-xl px-2 shadow-sm mb-8 mx-6 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'} no-print`}>
         <div className="">
             <div className="flex overflow-x-auto gap-2 scrollbar-hide">
                 <TabButton id="profile" label="My Profile" icon={User} />
                 <TabButton id="courses" label="My Courses (CV)" icon={BookOpen} />
-               
-                <TabButton id="training" label="Training" icon={Briefcase} />
+                <TabButton id="workshops" label="Workshops" icon={CalendarIcon} />
+                <TabButton id="exams" label="Exams" icon={ClipboardList} />
+                <TabButton id="internships" label="Internships" icon={Briefcase} />
+                <TabButton id="training" label="Training" icon={Award} />
+                <TabButton id="invitations" label="Invitations" icon={Mail} />
             </div>
         </div>
       </div>
@@ -339,10 +491,8 @@ export const StudentDashboard = () => {
             {/* --- 1. MY PROFILE SECTION --- */}
             {activeTab === 'profile' && (
               <div className="w-full relative">
-                
-                {/* === VIEW MODE === */}
                 {!isEditingProfile && (
-                  <div className="w-full">
+                  <div className="w-full no-print">
                     <div className="h-32 md:h-60 w-full bg-gradient-to-r from-black-600 via-primary-600 to-blue-600 relative">
                         <div className="absolute top-6 right-6">
                             <button 
@@ -469,7 +619,7 @@ export const StudentDashboard = () => {
 
                 {/* === EDIT MODE === */}
                 {isEditingProfile && (
-                  <div className="max-w-6xl mx-auto px-6 py-8">
+                  <div className="max-w-6xl mx-auto px-6 py-8 no-print">
                     <div className={`rounded-3xl shadow-2xl overflow-hidden border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                         <div className="p-8 md:p-10">
                             <div className="flex items-center justify-between mb-10 border-b border-gray-100 dark:border-slate-700 pb-6">
@@ -622,9 +772,52 @@ export const StudentDashboard = () => {
               </div>
             )}
 
-            {/* --- 2. COURSES --- */}
+            {/* --- 2. WORKSHOPS SECTION --- */}
+            {activeTab === 'workshops' && (
+                <div className="max-w-7xl mx-auto px-6 py-8 no-print">
+                    <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
+                    {workshops.length === 0 ? (
+                        <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                            <p className="text-gray-500">No workshops available right now.</p>
+                        </div>
+                    ) : (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {workshops.map(ws => (
+                                <div key={ws.id} className={`p-6 rounded-xl border shadow-sm hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                    <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {ws.date}</div>
+                                    <div className="mb-4">
+                                        <h4 className="font-bold text-lg">{ws.title}</h4>
+                                        <p className="text-xs text-gray-500 mb-2 mt-1">{ws.location}</p>
+                                        <p className="text-sm text-gray-400 line-clamp-2 h-10">Join us for an exciting session on {ws.title}.</p>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs text-gray-400 mb-4">
+                                        <span>Seats: {ws.enrolled} / {ws.capacity}</span>
+                                        <span className={ws.capacity - ws.enrolled <= 5 ? 'text-red-500' : 'text-green-500'}>
+                                            {ws.capacity - ws.enrolled <= 5 ? 'Filling Fast' : 'Available'}
+                                        </span>
+                                    </div>
+                                    {registeredWorkshops.includes(ws.id) ? (
+                                        <button disabled className="w-full py-2 bg-gray-400 text-white rounded-lg font-medium cursor-not-allowed">
+                                            Registered
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={() => handleRegisterWorkshop(ws.id)}
+                                            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Plus size={16} /> Register Now
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* --- 3. COURSES SECTION --- */}
             {activeTab === 'courses' && (
-              <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+              <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
                  
                  {/* قسم البحث */}
                  <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -687,14 +880,9 @@ export const StudentDashboard = () => {
                               </div>
 
                               <div className="flex gap-2 mt-4">
-                                {!enr.completed && (
-                                  <button 
-                                    onClick={() => handleUpdateProgress(enr._id, enr.progress || 0)}
-                                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
-                                  >
-                                    + Update Progress
-                                  </button>
-                                )}
+                                <button className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">
+                                    + Resume Learning
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -702,7 +890,7 @@ export const StudentDashboard = () => {
                     )}
                  </div>
 
-                 {/* قسم الكورسات المكتملة */}
+                 {/* قسم الكورسات المكتملة + الشهادات */}
                  <div>
                     <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Completed Courses (CV)</h2>
                     {enrollments.length === 0 ? (
@@ -720,6 +908,13 @@ export const StudentDashboard = () => {
                                    <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
                                        Completed on: {new Date(item.completed_at).toLocaleDateString()}
                                    </p>
+                                   {/* CERTIFICATE BUTTON */}
+                                   <button 
+                                      onClick={() => setCertificateModal(item.course)}
+                                      className="w-full mt-2 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                   >
+                                      <Award size={16}/> View Certificate
+                                   </button>
                                </div>
                            ))}
                         </div>
@@ -729,13 +924,119 @@ export const StudentDashboard = () => {
               </div>
             )}
 
-            {/* --- 3. TRAINING --- */}
+            {/* --- 4. EXAMS SECTION --- */}
+            {activeTab === 'exams' && (
+                <div className="max-w-4xl mx-auto px-6 py-8 no-print">
+                    {!currentExam ? (
+                        <div>
+                            <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
+                            {exams.length === 0 ? (
+                                <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                                    <p className="text-gray-500">No exams available right now.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {exams.map(exam => (
+                                        <div key={exam.id} className={`p-6 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:shadow-md transition-all'}`}>
+                                            <div>
+                                                <h3 className="font-bold text-xl mb-1">{exam.title}</h3>
+                                                <p className="text-sm text-gray-500 flex items-center gap-2"><Clock size={14}/> {exam.questions.length} Questions</p>
+                                            </div>
+                                            <Button onClick={() => startExam(exam)}>Start Exam</Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* TAKING EXAM VIEW */
+                        <div className={`p-8 rounded-2xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div className="flex justify-between items-center mb-8 border-b pb-4 dark:border-slate-700">
+                                <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{currentExam.title}</h2>
+                                <span className="text-sm font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">In Progress</span>
+                            </div>
+                            
+                            <div className="space-y-8">
+                                {currentExam.questions.map((q, idx) => (
+                                    <div key={idx}>
+                                        <p className="font-bold text-lg mb-4"><span className="text-gray-400 mr-2">Q{idx+1}.</span> {q.text}</p>
+                                        <div className="space-y-3">
+                                            {q.options.map((opt, oIdx) => (
+                                                <label key={oIdx} className={`flex items-center p-4 rounded-lg border cursor-pointer transition-all ${examAnswers[idx] === oIdx ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'}`}>
+                                                    <input 
+                                                        type="radio" 
+                                                        name={`q-${idx}`} 
+                                                        className="w-4 h-4 text-blue-600"
+                                                        checked={examAnswers[idx] === oIdx}
+                                                        onChange={() => handleAnswerChange(idx, oIdx)}
+                                                    />
+                                                    <span className="ml-3">{opt}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t dark:border-slate-700 flex justify-end">
+                                <Button onClick={submitExam} className="bg-green-600 hover:bg-green-700">Submit Exam</Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* --- 5. INTERNSHIPS SECTION --- */}
+            {activeTab === 'internships' && (
+              <div className="max-w-7xl mx-auto px-6 py-8 no-print">
+                <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
+                {approvedInternships.length === 0 ? (
+                    <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                        <p className="text-gray-500">No internships approved yet.</p>
+                    </div>
+                ) : (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {approvedInternships.map(internship => (
+                            <div key={internship._id} className={`p-6 rounded-xl border shadow-sm hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                <div className="mb-4">
+                                    <div className="flex justify-between items-start">
+                                        <h4 className="font-bold text-lg">{internship.title}</h4>
+                                        <span className={`text-xs px-2 py-1 rounded bg-gray-100 dark:bg-slate-700 text-gray-600`}>{internship.type}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mb-2 mt-1">{internship.company?.email || 'Company'}</p>
+                                    <div className="flex items-center gap-1 text-xs text-gray-400"><MapPin size={12}/> {internship.location}</div>
+                                </div>
+                                <div className="text-sm text-gray-500 mb-4 line-clamp-2 h-10">{internship.description}</div>
+                                <button 
+                                    onClick={() => {
+                                        const input = document.createElement('input');
+                                        input.type = 'file';
+                                        input.onchange = (e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                                setCvFile(e.target.files[0]);
+                                                handleApply(null, internship.company._id);
+                                            }
+                                        };
+                                        input.click();
+                                    }}
+                                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                                >
+                                    Apply Now
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+              </div>
+            )}
+
+            {/* --- 6. TRAINING SECTION --- */}
             {activeTab === 'training' && (
-              <div className="max-w-6xl mx-auto px-6 py-8">
+              <div className="max-w-6xl mx-auto px-6 py-8 no-print">
                 <div className={`p-8 rounded-3xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                   <h2 className="text-2xl font-bold mb-8 text-slate-900 dark:text-white">Apply for Training</h2>
                   <div className="grid md:grid-cols-2 gap-12">
-                      <form onSubmit={handleApply} className="space-y-6">
+                      <form onSubmit={(e) => handleApply(e)} className="space-y-6">
                           <div>
                               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Target Company ID</label>
                               <input 
@@ -748,8 +1049,18 @@ export const StudentDashboard = () => {
                           </div>
                           <div>
                               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Upload CV (PDF)</label>
-                              <div className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50/50 transition-all ${darkMode ? 'border-slate-600 hover:bg-slate-700/50' : 'border-gray-300'}`}>
-                                  <Upload size={48} className="mx-auto mb-4 text-gray-400"/><p className="text-base text-gray-500 font-medium">Click to upload CV</p>
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                id="cv-upload" 
+                                onChange={handleFileChange}
+                              />
+                              <div 
+                                onClick={() => document.getElementById('cv-upload').click()}
+                                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50/50 transition-all ${darkMode ? 'border-slate-600 hover:bg-slate-700/50' : 'border-gray-300'}`}
+                              >
+                                  <Upload size={48} className="mx-auto mb-4 text-gray-400"/>
+                                  <p className="text-base text-gray-500 font-medium">{cvFile ? cvFile.name : "Click to upload CV"}</p>
                               </div>
                           </div>
                           <Button type="submit" className="w-full py-3 text-lg">Submit Application</Button>
@@ -769,10 +1080,168 @@ export const StudentDashboard = () => {
                 </div>
               </div>
             )}
+                        {/* --- NEW: INVITATIONS SECTION --- */}
+                        {activeTab === 'invitations' && (
+                <div className="max-w-5xl mx-auto px-6 py-8 no-print">
+                    <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Invitations</h2>
+                    
+                    {/* Mock Data for Invitations */}
+                    {[
+                        { id: 101, companyName: 'Tech Solutions', role: 'Junior React Developer', date: new Date().toLocaleDateString(), status: 'pending' },
+                        { id: 102, companyName: 'Innovate Corp', role: 'Data Analyst Intern', date: new Date().toLocaleDateString(), status: 'accepted' }
+                    ].filter(inv => inv.status !== 'rejected').length === 0 ? (
+                        <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                            <p className="text-gray-500">No invitations pending.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {[ 
+                                { id: 101, companyName: 'Tech Solutions', role: 'Junior React Developer', date: new Date().toLocaleDateString(), status: 'pending' },
+                                { id: 102, companyName: 'Innovate Corp', role: 'Data Analyst Intern', date: new Date().toLocaleDateString(), status: 'accepted' }
+                            ].map(inv => (
+                                <div key={inv.id} className={`p-6 rounded-xl border shadow-sm flex flex-col md:flex-row items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                    <div className="flex items-center gap-4 mb-4 md:mb-0">
+                                        <div className={`p-4 rounded-full ${inv.companyName.includes('Tech') ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                                            <Briefcase size={24}/>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-lg">{inv.companyName}</h3>
+                                            <p className="text-sm text-gray-500">{inv.role} • Invited on {inv.date}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    {inv.status === 'pending' ? (
+                                        <div className="flex gap-3">
+                                            <button 
+                                                onClick={() => alert(`Invitation from ${inv.companyName} rejected.`)}
+                                                className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-50 font-bold transition-colors"
+                                            >
+                                                Decline
+                                            </button>
+                                            <button 
+                                                onClick={() => alert(`Invitation from ${inv.companyName} accepted! Application sent.`)}
+                                                className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 font-bold transition-colors"
+                                            >
+                                                Accept
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-bold uppercase">Accepted</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
           </motion.div>
         </AnimatePresence>
       )}
+
+      {/* --- ENHANCED CERTIFICATE MODAL --- */}
+      {certificateModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div id="certificate-print-area" className="relative bg-white text-slate-900 w-[950px] max-w-full p-0 shadow-2xl flex flex-col items-center text-center overflow-hidden">
+                
+                {/* Border */}
+                <div className="absolute inset-[20px] border-[2px] border-slate-200 pointer-events-none"></div>
+                <div className="absolute inset-[24px] border-double border-[8px] border-yellow-500 pointer-events-none rounded-sm"></div>
+
+                {/* Header Section */}
+                <div className="relative z-10 pt-16 pb-8 px-12 w-full flex flex-col items-center">
+                    <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mb-6 border border-yellow-100">
+                        <Trophy size={48} className="text-yellow-600" />
+                    </div>
+                    
+                    <h1 className="text-5xl font-serif font-bold text-slate-800 mb-1 tracking-widest uppercase">Certificate</h1>
+                    <h2 className="text-xl text-yellow-700 font-semibold tracking-widest uppercase mb-4">Of Completion</h2>
+                    <div className="h-1 w-32 bg-yellow-400 mb-8"></div>
+                    
+                    <p className="text-lg text-slate-500 font-medium uppercase tracking-wider mb-2">Proudly Presented To</p>
+                    <h3 className="text-5xl font-serif font-extrabold text-blue-900 border-b-2 border-blue-200 pb-4 px-8 w-full max-w-3xl leading-tight">
+                        {profileData.name}
+                    </h3>
+                </div>
+
+                {/* Middle Section */}
+                <div className="relative z-10 px-12 w-full flex flex-col items-center mb-12">
+                    <p className="text-lg text-slate-500 font-medium uppercase tracking-wider mb-4">For Successfully Completing</p>
+                    <h4 className="text-3xl font-serif text-slate-800 font-bold max-w-2xl leading-tight mb-8">
+                        {certificateModal.title}
+                    </h4>
+                    
+                    {/* New: Details Grid */}
+                    <div className="w-full max-w-3xl grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-lg border border-slate-100 text-left mb-8">
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Certificate ID</p>
+                            <p className="text-slate-800 font-mono font-bold tracking-widest">CERT-2023-{Math.floor(Math.random()*10000)}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Issue Date</p>
+                            <p className="text-slate-800 font-bold">{new Date().toLocaleDateString()}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Duration</p>
+                            <p className="text-slate-800 font-bold">{certificateModal.duration_hours || 40} Hours</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Grade</p>
+                            <p className="text-green-700 font-bold uppercase">Excellent</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer / Signatures */}
+                <div className="relative z-10 w-full px-12 pb-16 flex justify-between items-end mt-4">
+                    
+                    {/* Instructor Signature */}
+                    <div className="flex flex-col items-center w-1/3 border-r border-slate-200 pr-8">
+                        <div className="mb-4 text-blue-500 font-cursive text-3xl font-serif italic opacity-80">Dr. Signature</div>
+                        <div className="h-0.5 w-full bg-slate-400 mb-2"></div>
+                        <p className="font-bold text-slate-800">{certificateModal.teacher?.name || 'Course Instructor'}</p>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide">Instructor</p>
+                    </div>
+
+                    {/* Verification Info */}
+                    <div className="flex flex-col items-center w-1/3 border-r border-slate-200 pr-8">
+                         <div className="p-3 border border-slate-300 rounded-full mb-2 bg-slate-50">
+                             <ShieldCheck size={24} className="text-slate-400"/>
+                         </div>
+                         <p className="text-xs text-slate-400 font-mono">VERIFY AT: verify.edu/cert/{Math.floor(Math.random()*9999)}</p>
+                    </div>
+
+                    {/* Director Signature */}
+                    <div className="flex flex-col items-center w-1/3">
+                         <div className="mb-4 text-blue-500 font-cursive text-3xl font-serif italic opacity-80">John Doe</div>
+                        <div className="h-0.5 w-full bg-slate-400 mb-2"></div>
+                        <p className="font-bold text-slate-800">Academic Director</p>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide">EduTech University</p>
+                    </div>
+
+                </div>
+
+                {/* Print Controls (Hidden on Print) */}
+                <div className="absolute top-6 right-6 flex gap-3 no-print z-50">
+                    <button 
+                        onClick={() => setCertificateModal(null)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-3 rounded-lg shadow-lg transition-colors"
+                        title="Close"
+                    >
+                        <X size={20} />
+                    </button>
+                    <button 
+                        onClick={handlePrintCertificate}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-lg transition-colors"
+                        title="Print / Save PDF"
+                    >
+                        <Printer size={20} /> Print / Save PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
 import { 
   Users, UserPlus, Building2, FileText, 
-  Shield, Layers, Save, X, TrendingUp, Clock, AlertOctagon, Moon, Sun, Briefcase
+  Shield, Layers, Save, X, AlertOctagon, Moon, Sun, Briefcase, Search, Trash2, CheckCircle
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
@@ -24,12 +24,17 @@ export const AdminDashboard = () => {
   const [teachers, setTeachers] = useState([]); 
   const [companies, setCompanies] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-  const [content, setContent] = useState([]); // يحتوي على الكورسات المعلقة (Pending Courses)
-  // --- إضافة جديدة: State للوظائف ---
-  const [internships, setInternships] = useState([]); 
+  const [content, setContent] = useState([]); // الكورسات المعلقة
+  const [internships, setInternships] = useState([]); // الوظائف المعلقة
+  
+  // States للبحث والمحتوى المقبول
+  const [searchQuery, setSearchQuery] = useState('');
+  const [approvedCourses, setApprovedCourses] = useState([]);
+  const [approvedInternships, setApprovedInternships] = useState([]);
+  const [contentView, setContentView] = useState('pending');
+
   const [certifications, setCertifications] = useState([]); 
   const [settings, setSettings] = useState({ maintenanceMode: false });
-
   const [refresh, setRefresh] = useState(0);
 
   // === دالة جلب البيانات ===
@@ -57,37 +62,52 @@ export const AdminDashboard = () => {
             cData = cRes.data;
         } catch (e) { console.log("Companies API missing or failed"); }
 
-        // 4. جلب الكورسات المعلقة (Pending Courses)
+        // 4. جلب الكورسات المعلقة
         let cntData = [];
         try {
             const cntRes = await axios.get('http://localhost:5000/api/admin/pending/courses', config);
             cntData = cntRes.data;
         } catch (e) { console.log("Courses API missing or failed"); }
 
-        // --- إضافة جديدة: جلب الوظائف المعلقة (Pending Internships) ---
-        // نفترض أن المسار هو /api/admin/pending/internships أو مشابه له
+        // 5. جلب الوظائف المعلقة
         let iData = [];
         try {
             const iRes = await axios.get('http://localhost:5000/api/admin/pending/internships', config);
             iData = iRes.data;
         } catch (e) { console.log("Internships API missing or failed"); }
 
+        // --- جلب الكورسات المقبولة (Approved Courses) ---
+        let acData = [];
+        try {
+            const acRes = await axios.get('http://localhost:5000/api/admin/approved/courses', config);
+            acData = acRes.data;
+        } catch (e) { console.log("Approved Courses API missing"); }
+
+        // --- جلب الوظائف المقبولة (Approved Internships) ---
+        let aiData = [];
+        try {
+            const aiRes = await axios.get('http://localhost:5000/api/admin/approved/internships', config);
+            aiData = aiRes.data;
+        } catch (e) { console.log("Approved Internships API missing"); }
+
         // تعيين البيانات
         setTeachers(tRes.data);
         setAllUsers(uData);
         setCompanies(cData);
         setContent(cntData);
-        setInternships(iData); // حفظ الوظائف
+        setInternships(iData);
+        setApprovedCourses(acData);
+        setApprovedInternships(aiData);
         
         setCertifications([]);
         setSettings({ maintenanceMode: false });
 
-        // حساب الإحصائيات (تم تحديثها لتشمل الوظائف)
+        // حساب الإحصائيات
         setStats({
           totalStudents: uData.filter(u => u.user_type === 'student').length,
           activeTeachers: uData.filter(u => u.user_type === 'teacher' && u.is_active).length,
           pendingRequests: tRes.data.length + cData.length,
-          pendingContent: cntData.length + iData.length, // دمج الكورسات والوظائف
+          pendingContent: cntData.length + iData.length, 
           pendingInternships: iData.length
         });
 
@@ -100,127 +120,71 @@ export const AdminDashboard = () => {
     loadData();
   }, [refresh]);
 
-  // === دالة معالجة المعلمين ===
+  // === دالة حذف المستخدم ===
+  const handleDeleteUser = async (id) => {
+    if(!window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`http://localhost:5000/api/admin/user/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert("User deleted successfully!");
+      setRefresh(prev => prev + 1); // تحديث القائمة
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete user.");
+    }
+  };
+
+  // === دوال الموافقة/الرفض ===
   const handleTeacherAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      
-      let url = '';
-      if (action === 'approved') {
-        url = `http://localhost:5000/api/admin/approved/${id}`;
-      } else if (action === 'rejected') {
-        url = `http://localhost:5000/api/admin/reject/${id}`;
-      }
-
+      let url = action === 'approved' ? `http://localhost:5000/api/admin/approved/${id}` : `http://localhost-5000/api/admin/reject/${id}`;
       const response = await axios.put(url, {}, config);
-      
-      if(response.status === 200) {
-        setRefresh(prev => prev + 1);
-        alert(`Teacher ${action}d successfully!`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update teacher status.");
-    }
+      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Teacher ${action}d successfully!`); }
+    } catch (err) { console.error(err); alert("Failed to update teacher status."); }
   };
 
-  // === دالة معالجة الشركات ===
   const handleCompanyAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
-      
-      const url = action === 'approved' 
-        ? `http://localhost:5000/api/admin/approved/${id}`
-        : `http://localhost:5000/api/admin/reject/${id}`;
-
-      const response = await axios.put(url, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if(response.status === 200) {
-        setRefresh(prev => prev + 1);
-        alert(`Company ${action} successfully!`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update company status.");
-    }
+      const url = action === 'approved' ? `http://localhost:5000/api/admin/approved/${id}` : `http://localhost-5000/api/admin/reject/${id}`;
+      const response = await axios.put(url, {}, { headers: { Authorization: `Bearer ${token}` } });
+      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Company ${action} successfully!`); }
+    } catch (err) { console.error(err); alert("Failed to update company status."); }
   };
 
-  // === دالة معالجة الكورسات (المحتوى) ===
-   // === دالة معالجة الكورسات (المحتوى) ===
-   const handleContentAction = async (id, action) => {
+  const handleContentAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
-      const config = { 
-        headers: { 
-          Authorization: `Bearer ${token}`
-        } 
-      };
-      
-      // التعديل: استخدام المسارات المخصصة للأدمن الموجودة في الباك إند
-      let url = '';
-      if (action === 'approved') {
-        url = `http://localhost:5000/api/admin/approve/course/${id}`;
-      } else if (action === 'rejected') {
-        url = `http://localhost:5000/api/admin/reject/course/${id}`;
-      }
-
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      let url = action === 'approved' ? `http://localhost:5000/api/admin/approve/course/${id}` : `http://localhost:5000/api/admin/reject/course/${id}`;
       const response = await axios.put(url, {}, config);
-      
-      if(response.status === 200) {
-        setRefresh(prev => prev + 1); // تحديث الواجهة
-        alert(`Course ${action}d successfully!`);
-      } else {
-        alert("Failed to update course. Status: " + response.status);
-      }
-    } catch (err) {
-      console.error("Error in handleContentAction:", err);
-      alert("Failed to update course status.");
-    }
+      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Course ${action}d successfully!`); }
+    } catch (err) { console.error("Error in handleContentAction:", err); alert("Failed to update course status."); }
   };
 
-  // --- إضافة جديدة: دالة معالجة الوظائف ---
   const handleInternshipAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
-      const config = { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        } 
-      };
-      
-      // نفترض أن تحديث الوظيفة يتم عبر مسار الوظائف مع إرسال الحالة
-      // يرجى التأكد من وجود هذا المسار في الباك إند
-      const response = await axios.put(`http://localhost:5000/api/internships/${id}`, {
-        status: action 
-      }, config);
-      
-      if(response.status === 200) {
-        setRefresh(prev => prev + 1); // تحديث الواجهة
-        alert(`Internship ${action}d successfully!`);
-      } else {
-        alert("Failed to update internship.");
-      }
-    } catch (err) {
-      console.error("Error in handleInternshipAction:", err);
-      alert("Failed to update internship status.");
-    }
+      const config = { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } };
+      const response = await axios.put(`http://localhost:5000/api/internships/${id}`, { status: action === 'approved' ? 'approved' : 'rejected' }, config);
+      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Internship ${action}d successfully!`); }
+    } catch (err) { console.error("Error in handleInternshipAction:", err); alert("Failed to update internship status."); }
   };
-
-  // دوال وهمية للوظائف غير الموجودة
-  const handleDeleteUser = async (id) => { alert("Delete User Feature"); };
-  const handleAddUser = async (e) => { e.preventDefault(); alert("Add User Feature"); };
-  const handleSaveCert = async (e) => { e.preventDefault(); alert("Cert Feature"); };
-  const handleEditCert = (cert) => {};
-  const handleDeleteCert = async (id) => {};
 
   const TabButton = ({ id, label, icon: Icon }) => (
     <button onClick={() => setActiveTab(id)} className={`flex items-center gap-2 px-5 py-3 font-medium transition-all border-b-2 ${activeTab === id ? 'border-primary-600 text-primary-600 bg-primary-50 dark:bg-slate-800 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
       <Icon size={18} /> {label}
     </button>
+  );
+
+  // فلترة المستخدمين للبحث
+  const filteredUsers = allUsers.filter(u => 
+    u.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -286,17 +250,25 @@ export const AdminDashboard = () => {
               </div>
             )}
 
-            {/* --- 2. REQUESTS --- */}
+            {/* --- 2. REQUESTS (Logic Fixed: No Duplicate Emails) --- */}
             {activeTab === 'requests' && (
               <div className="space-y-6">
+                {/* Pending Teachers */}
                 <div>
                   <h3 className={`font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-slate-200' : 'text-gray-700'}`}><UserPlus size={18}/> Pending Teachers</h3>
                   <div className="grid gap-4">
                     {teachers.length === 0 ? <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>No pending requests</p> : teachers.map(t => (
                       <div key={t._id} className={`p-4 rounded-lg border flex justify-between items-center shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
                         <div>
-                          <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t.name || 'No Name'}</p>
-                          <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{t.email}</p>
+                          {/* التعديل: عرض الاسم أو الايميل */}
+                          <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t.name ? t.name : t.email}</p>
+                          
+                          {/* التعديل: عرض الايميل في السطر الثاني فقط إذا كان الاسم موجوداً لتجنب التكرار */}
+                          {t.name ? (
+                            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{t.email}</p>
+                          ) : (
+                            <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>Teacher Registration</p>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button onClick={() => handleTeacherAction(t._id, 'rejected')} variant="danger" className="text-xs">Reject</Button>
@@ -307,14 +279,22 @@ export const AdminDashboard = () => {
                   </div>
                 </div>
                 
+                {/* Pending Companies */}
                 <div>
                   <h3 className={`font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-slate-200' : 'text-gray-700'}`}><Building2 size={18}/> Pending Companies</h3>
                   <div className="grid gap-4">
                     {companies.length === 0 ? <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>No pending requests</p> : companies.map(c => (
                       <div key={c._id} className={`p-4 rounded-lg border flex justify-between items-center shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
                         <div>
-                          <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{c.name || c.email}</p>
-                          <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Company Registration</p>
+                          {/* التعديل: عرض اسم الشركة أو الايميل */}
+                          <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{c.name ? c.name : c.email}</p>
+                          
+                          {/* التعديل: نفس منطق المعلمين، لا تكرر الايميل */}
+                          {c.name ? (
+                            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{c.email}</p>
+                          ) : (
+                            <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>Company Registration</p>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button onClick={() => handleCompanyAction(c._id, 'rejected')} variant="danger" className="text-xs">Reject</Button>
@@ -327,72 +307,128 @@ export const AdminDashboard = () => {
               </div>
             )}
 
-            {/* --- 3. USERS --- */}
+            {/* --- 3. USERS (Search & Delete) --- */}
             {activeTab === 'users' && (
                <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <div className="p-4 border-b"><h3 className="font-bold">All Users</h3></div>
+                <div className="p-4 border-b flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h3 className="font-bold">All Users</h3>
+                    {/* Search Input */}
+                    <div className="relative w-full md:w-auto">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                        <input 
+                            type="text" 
+                            placeholder="Search by email or name..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className={`pl-10 pr-4 py-2 rounded-lg text-sm w-full md:w-64 outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-primary-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-primary-500'}`}
+                        />
+                    </div>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="text-xs uppercase bg-gray-50 dark:bg-slate-700 text-gray-500">
-                            <tr><th className="p-4">Email</th><th className="p-4">Type</th><th className="p-4">Status</th></tr>
+                            <tr>
+                                <th className="p-4">Email</th>
+                                <th className="p-4">Type</th>
+                                <th className="p-4">Status</th>
+                                <th className="p-4 text-center">Actions</th>
+                            </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                            {allUsers.map(u => (
+                            {filteredUsers.length > 0 ? filteredUsers.map(u => (
                                 <tr key={u._id} className="hover:bg-gray-50 dark:hover:bg-slate-700">
                                     <td className="p-4">{u.email}</td>
                                     <td className="p-4 capitalize">{u.user_type}</td>
                                     <td className="p-4 capitalize">{u.status}</td>
+                                    <td className="p-4 text-center">
+                                        <button 
+                                            onClick={() => handleDeleteUser(u._id)}
+                                            className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                            title="Delete User"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </td>
                                 </tr>
-                            ))}
+                            )) : (
+                                <tr>
+                                    <td colSpan="4" className="p-4 text-center text-gray-500">No users found.</td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
                </div>
             )}
 
-            {/* --- CONTENT TAB (Courses & Internships) --- */}
+            {/* --- CONTENT TAB (Pending & Approved) --- */}
             {activeTab === 'content' && (
                <div className="space-y-8">
+                 {/* Toggle Buttons */}
+                 <div className="flex justify-center mb-6">
+                     <div className={`p-1 rounded-lg inline-flex ${darkMode ? 'bg-slate-800' : 'bg-gray-200'}`}>
+                        <button 
+                            onClick={() => setContentView('pending')}
+                            className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${contentView === 'pending' ? 'bg-white dark:bg-slate-600 shadow-sm text-primary-600 dark:text-white' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700'}`}
+                        >
+                            Pending Requests
+                        </button>
+                        <button 
+                            onClick={() => setContentView('approved')}
+                            className={`px-6 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${contentView === 'approved' ? 'bg-white dark:bg-slate-600 shadow-sm text-primary-600 dark:text-white' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700'}`}
+                        >
+                            <CheckCircle size={16} /> Approved Content
+                        </button>
+                     </div>
+                 </div>
+
                  {/* قسم الكورسات */}
                  <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="p-4 border-b flex justify-between items-center">
-                        <h3 className="font-bold">Pending Courses</h3>
+                        <h3 className="font-bold flex items-center gap-2">
+                            {contentView === 'pending' ? 'Pending Courses' : 'Approved Courses'}
+                        </h3>
                     </div>
                     <div className="p-4">
-                        {content.length === 0 ? <p>No pending courses.</p> : 
+                        {contentView === 'pending' ? (
+                            content.length === 0 ? <p>No pending courses.</p> : 
                             content.map(c => (
                                 <div key={c._id} className="p-4 mb-2 border rounded flex justify-between items-center">
                                     <div>
                                         <span className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{c.title || 'Untitled Course'}</span>
-                                        <span className={`text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>by {c.teacher?.name || 'Unknown'}</span>
+                                        <span className={`text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}> by {c.teacher?.name || 'Unknown'}</span>
                                     </div>
                                     <div className="flex gap-2">
-                                        <Button 
-                                            className="text-xs bg-red-500 hover:bg-red-600 text-white" 
-                                            onClick={() => handleContentAction(c._id, 'rejected')}
-                                        >
-                                            Reject
-                                        </Button>
-                                        <Button 
-                                            className="text-xs bg-green-500 hover:bg-green-600 text-white" 
-                                            onClick={() => handleContentAction(c._id, 'approved')}
-                                        >
-                                            Approve
-                                        </Button>
+                                        <Button className="text-xs bg-red-500 hover:bg-red-600 text-white" onClick={() => handleContentAction(c._id, 'rejected')}>Reject</Button>
+                                        <Button className="text-xs bg-green-500 hover:bg-green-600 text-white" onClick={() => handleContentAction(c._id, 'approved')}>Approve</Button>
                                     </div>
                                 </div>
                             ))
-                        }
+                        ) : (
+                            approvedCourses.length === 0 ? <p>No approved courses found.</p> :
+                            approvedCourses.map(c => (
+                                <div key={c._id} className="p-4 mb-2 border rounded flex justify-between items-center opacity-80 hover:opacity-100">
+                                    <div>
+                                        <span className={`font-bold ${darkMode ? 'text-green-400' : 'text-green-700'}`}>{c.title || 'Untitled Course'}</span>
+                                        <span className={`text-xs ml-2 ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Approved</span>
+                                        <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}> by {c.teacher?.name || 'Unknown'}</div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                  </div>
 
-                 {/* --- إضافة جديدة: قسم الوظائف --- */}
+                 {/* قسم الوظائف */}
                  <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="p-4 border-b flex justify-between items-center">
-                        <h3 className="font-bold flex items-center gap-2"><Briefcase size={18} className="text-blue-500"/> Pending Internships</h3>
+                        <h3 className="font-bold flex items-center gap-2"><Briefcase size={18} className="text-blue-500"/> 
+                            {contentView === 'pending' ? 'Pending Internships' : 'Approved Internships'}
+                        </h3>
                     </div>
                     <div className="p-4">
-                        {internships.length === 0 ? <p>No pending internships.</p> : 
+                        {contentView === 'pending' ? (
+                            internships.length === 0 ? <p>No pending internships.</p> : 
                             internships.map(i => (
                                 <div key={i._id} className="p-4 mb-2 border rounded flex justify-between items-center">
                                     <div className="flex-1">
@@ -406,22 +442,28 @@ export const AdminDashboard = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <Button 
-                                            className="text-xs bg-red-500 hover:bg-red-600 text-white" 
-                                            onClick={() => handleInternshipAction(i._id, 'rejected')}
-                                        >
-                                            Reject
-                                        </Button>
-                                        <Button 
-                                            className="text-xs bg-green-500 hover:bg-green-600 text-white" 
-                                            onClick={() => handleInternshipAction(i._id, 'approved')}
-                                        >
-                                            Approve
-                                        </Button>
+                                        <Button className="text-xs bg-red-500 hover:bg-red-600 text-white" onClick={() => handleInternshipAction(i._id, 'rejected')}>Reject</Button>
+                                        <Button className="text-xs bg-green-500 hover:bg-green-600 text-white" onClick={() => handleInternshipAction(i._id, 'approved')}>Approve</Button>
                                     </div>
                                 </div>
                             ))
-                        }
+                        ) : (
+                            approvedInternships.length === 0 ? <p>No approved internships found.</p> :
+                            approvedInternships.map(i => (
+                                <div key={i._id} className="p-4 mb-2 border rounded flex justify-between items-center opacity-80 hover:opacity-100">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`font-bold ${darkMode ? 'text-green-400' : 'text-green-700'}`}>{i.title || 'Untitled Internship'}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300`}>Approved</span>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                                            <span>by {i.company?.name || i.company?.email || 'Unknown Company'}</span>
+                                            <span>📍 {i.location}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                  </div>
                </div>

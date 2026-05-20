@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   BookOpen, Users, MessageSquare, Plus, Trash2, FileText, Send, 
   Upload, TrendingUp, CheckCircle, XCircle, Moon, Sun, Clock,
-  User, Edit3, MapPin, Calendar, GraduationCap, Mail, Phone, Globe, Brain, Camera, X, Save
+  User, Edit3, MapPin, Calendar, GraduationCap, Mail, Phone, Globe, Brain, Camera, X, Save, ClipboardList, Calendar as CalendarIcon
 } from 'lucide-react';
 
 export const TeacherDashboard = () => {
@@ -27,20 +27,36 @@ export const TeacherDashboard = () => {
 
   // --- Data States ---
   const [courses, setCourses] = useState([]);
-  const [students, setStudents] = useState([]); // سيتم تعبئته من الباك
-  const [messages, setMessages] = useState([]); // سيتم تعبئته من الباك
+  const [students, setStudents] = useState([]); 
+  const [messages, setMessages] = useState([]); 
   
-  // --- Profile States (مطابق لـ Teacher Schema) ---
+  // --- EXAMS STATES ---
+  const [exams, setExams] = useState([]);
+  const [showExamModal, setShowExamModal] = useState(false);
+  
+  // تحديث الحالة لتكون فارغة للبداية (سنختار من القائمة)
+  const [newExam, setNewExam] = useState({ 
+    title: '', 
+    course: '', 
+    passing_score: 50,
+    questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0 }] 
+  });
+  
+  // --- NEW: WORKSHOPS STATES ---
+  const [workshops, setWorkshops] = useState([]);
+  const [showWorkshopModal, setShowWorkshopModal] = useState(false);
+  const [workshopData, setWorkshopData] = useState({ title: '', description: '', date: '', location: '', capacity: '' });
+  
+  // --- Profile States ---
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({
     full_name: user?.name || '',
     phone: '',
     specialization: '',
     qualifications: '',
-    years_experince: '', // انتبه للتهجئة كما في الباك
+    years_experince: '', 
     linkedin_url: '',
     cv_url: '',
-    // حقول إضافية للعرض فقط (ليست في السكما الأساسية)
     university: '', 
     country: '', 
     gradYear: '', 
@@ -77,8 +93,12 @@ export const TeacherDashboard = () => {
         const token = localStorage.getItem('token');
         if(!token) return;
 
+        // Mock Data للتجربة
+        setWorkshops([
+            { id: 1, title: 'Advanced React Patterns', date: '2023-11-15', location: 'Online', capacity: 50, enrolled: 12 }
+        ]);
+
         // أ) جلب البروفايل
-        // افترض أن الرابط هو /api/teacher/me
         const profileRes = await fetch('http://localhost:5000/api/teacher/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -106,7 +126,6 @@ export const TeacherDashboard = () => {
         }
 
         // ج) جلب الطلاب
-        // افترض أن الرابط هو /api/teacher/my-students
         const studentsRes = await fetch('http://localhost:5000/api/teacher/my-students', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -135,6 +154,128 @@ export const TeacherDashboard = () => {
 
   // === Handlers ===
 
+  // --- CREATE WORKSHOP HANDLER ---
+  const handleCreateWorkshop = (e) => {
+    e.preventDefault();
+    const newWorkshopItem = {
+        id: Date.now(),
+        ...workshopData,
+        enrolled: 0
+    };
+    setWorkshops([...workshops, newWorkshopItem]);
+    setShowWorkshopModal(false);
+    setWorkshopData({ title: '', description: '', date: '', location: '', capacity: '' });
+    alert("Workshop Created Successfully!");
+  };
+
+  // --- CREATE EXAM HANDLER (Fixed & Connected) ---
+  const handleCreateExam = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+
+    try {
+      // 1. إنشاء الامتحان
+      const examRes = await fetch('http://localhost:5000/api/exams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          course: newExam.course, // يجب أن يكون ID
+          title: newExam.title,
+          passing_score: Number(newExam.passing_score)
+        })
+      });
+
+      // --- معالجة الخطأ ---
+      if (!examRes.ok) {
+        let errorDetails = "Unknown Error";
+        const contentType = examRes.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+            try {
+                const errData = await examRes.json();
+                errorDetails = errData.message || JSON.stringify(errData);
+            } catch (e) {
+                errorDetails = "Failed to parse error JSON";
+            }
+        } else {
+            try {
+                errorDetails = await examRes.text();
+            } catch (e) {
+                errorDetails = "Failed to read error text";
+            }
+        }
+
+        console.error("❌ Server Error Details:", errorDetails);
+        console.error("Status Code:", examRes.status);
+        throw new Error(`Failed to create exam (${examRes.status}): ${errorDetails}`);
+      }
+      
+      const createdExam = await examRes.json();
+      const examId = createdExam._id;
+
+      // 2. إضافة الأسئلة
+      const questionPromises = newExam.questions.map(q => {
+        const correctAnswerText = q.options[q.correctIndex];
+
+        return fetch('http://localhost:5000/api/exams/question', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            exam: examId,
+            text: q.text,
+            options: q.options,
+            correct_answer: correctAnswerText
+          })
+        });
+      });
+
+      await Promise.all(questionPromises);
+
+      // 3. تحديث الواجهة
+      const createdExamObj = {
+        id: createdExam._id,
+        title: newExam.title,
+        questionsCount: newExam.questions.length,
+        submissions: 0,
+        questions: newExam.questions
+      };
+      
+      setExams([...exams, createdExamObj]);
+      setShowExamModal(false);
+      setNewExam({ 
+        title: '', 
+        course: '', 
+        passing_score: 50, 
+        questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0 }] 
+      });
+      
+      alert("Exam Created Successfully & Saved to DB!");
+
+    } catch (error) {
+      console.error("Connection Error:", error);
+      alert(error.message);
+    }
+  };
+
+  const addQuestionField = () => {
+    setNewExam({
+        ...newExam,
+        questions: [...newExam.questions, { text: '', options: ['', '', '', ''], correctIndex: 0 }]
+    });
+  };
+
+  const updateQuestion = (index, field, value) => {
+    const updatedQuestions = [...newExam.questions];
+    updatedQuestions[index][field] = value;
+    setNewExam({ ...newExam, questions: updatedQuestions });
+  };
+
   // حفظ البروفايل
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('token');
@@ -150,7 +291,7 @@ export const TeacherDashboard = () => {
           phone: profileData.phone,
           specialization: profileData.specialization,
           qualifications: profileData.qualifications,
-          years_experince: profileData.years_experince, // مطابق للباك
+          years_experince: profileData.years_experince, 
           linkedin_url: profileData.linkedin_url,
           cv_url: profileData.cv_url
         })
@@ -159,7 +300,7 @@ export const TeacherDashboard = () => {
       if (res.ok) {
         alert("Profile Updated Successfully!");
         setIsEditingProfile(false);
-        setRefresh(r => r + 1); // إعادة تحميل البيانات
+        setRefresh(r => r + 1); 
       } else {
         alert("Error updating profile");
       }
@@ -232,7 +373,7 @@ export const TeacherDashboard = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          receiverId: msgData.receiverId, // أو حسب ما يتطلبه الباك
+          receiverId: msgData.receiverId, 
           text: msgData.text
         })
       });
@@ -286,6 +427,8 @@ export const TeacherDashboard = () => {
         <TabButton id="profile" label="My Profile" icon={User} />
         <TabButton id="overview" label="Overview" icon={TrendingUp} />
         <TabButton id="courses" label="My Courses" icon={BookOpen} />
+        <TabButton id="workshops" label="Workshops" icon={CalendarIcon} />
+        <TabButton id="exams" label="Exams & Quizzes" icon={ClipboardList} />
         <TabButton id="classwork" label="Classwork" icon={Users} />
         <TabButton id="communication" label="Messages" icon={MessageSquare} />
       </div>
@@ -391,7 +534,152 @@ export const TeacherDashboard = () => {
               </div>
             )}
 
-            {/* 3. CLASSWORK */}
+            {/* 3. WORKSHOPS SECTION */}
+            {activeTab === 'workshops' && (
+               <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Workshops & Events</h2>
+                  <Button onClick={() => setShowWorkshopModal(true)}><Plus size={16} className="me-2"/> Announce Workshop</Button>
+                </div>
+
+                {/* Create Workshop Modal */}
+                {showWorkshopModal && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className={`w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                      <button onClick={() => setShowWorkshopModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500"><X size={24} /></button>
+                      <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Announce New Workshop</h2>
+                      <form onSubmit={handleCreateWorkshop} className="space-y-4">
+                        <div><label className="block text-sm font-medium mb-1">Workshop Title</label><input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.title} onChange={e => setWorkshopData({...workshopData, title: e.target.value})} /></div>
+                        <div><label className="block text-sm font-medium mb-1">Description</label><textarea required rows="3" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.description} onChange={e => setWorkshopData({...workshopData, description: e.target.value})} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="block text-sm font-medium mb-1">Date</label><input required type="date" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.date} onChange={e => setWorkshopData({...workshopData, date: e.target.value})} /></div>
+                            <div><label className="block text-sm font-medium mb-1">Location</label><input required type="text" placeholder="e.g. Online, Room 101" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.location} onChange={e => setWorkshopData({...workshopData, location: e.target.value})} /></div>
+                        </div>
+                        <div><label className="block text-sm font-medium mb-1">Capacity</label><input required type="number" min="1" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.capacity} onChange={e => setWorkshopData({...workshopData, capacity: e.target.value})} /></div>
+                        <div className="pt-4 flex justify-end gap-3"><Button type="button" onClick={() => setShowWorkshopModal(false)} className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-4 py-2 rounded-lg">Cancel</Button><Button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Publish Workshop</Button></div>
+                      </form>
+                    </div>
+                  </motion.div>
+                )}
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {workshops.map(ws => (
+                    <div key={ws.id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                      <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {ws.date}</div>
+                      <h3 className="font-bold text-lg mb-1">{ws.title}</h3>
+                      <p className="text-sm text-gray-500 mb-4 line-clamp-2">{ws.description}</p>
+                      <div className="flex justify-between items-center text-xs text-gray-400 border-t pt-3 dark:border-slate-700">
+                         <span>{ws.location}</span>
+                         <span>{ws.enrolled} / {ws.capacity} Enrolled</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+               </div>
+            )}
+
+            {/* 4. EXAMS SECTION */}
+            {activeTab === 'exams' && (
+               <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Exams & Quizzes</h2>
+                  <Button onClick={() => setShowExamModal(true)}><Plus size={16} className="me-2"/> Create Exam</Button>
+                </div>
+
+                {/* Create Exam Modal */}
+                {showExamModal && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className={`w-full max-w-3xl rounded-2xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                      <button onClick={() => setShowExamModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500"><X size={24} /></button>
+                      <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Create New Exam</h2>
+                      
+                      <form onSubmit={handleCreateExam} className="space-y-6">
+                         {/* Exam Basic Details (Updated) */}
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Exam Title</label>
+                                <input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} />
+                            </div>
+                            
+                            {/* UPDATED: Course Selection Dropdown */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Select Course</label>
+                                <select 
+                                    required 
+                                    className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
+                                    value={newExam.course}
+                                    onChange={e => setNewExam({...newExam, course: e.target.value})}
+                                >
+                                    <option value="">-- Choose a Course --</option>
+                                    {courses.map(c => (
+                                        <option key={c._id} value={c._id}>
+                                            {c.title}
+                                        </option>
+                                    ))}
+                                </select>
+                                {courses.length === 0 && <p className="text-xs text-red-500 mt-1">No courses found. Please create one first in "My Courses" tab.</p>}
+                            </div>
+                         </div>
+                         <div>
+                            <label className="block text-sm font-medium mb-1">Passing Score (%)</label>
+                            <input required type="number" min="1" max="100" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={newExam.passing_score} onChange={e => setNewExam({...newExam, passing_score: e.target.value})} />
+                         </div>
+                         
+                         {/* Questions Section */}
+                         <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-bold text-lg">Questions</h3>
+                                <button type="button" onClick={addQuestionField} className="text-blue-500 text-sm font-bold hover:underline">+ Add Question</button>
+                            </div>
+                            
+                            {newExam.questions.map((q, qIdx) => (
+                                <div key={qIdx} className={`p-4 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                    <label className="block text-sm font-medium mb-2">Question {qIdx + 1}</label>
+                                    <input required type="text" className={`w-full px-4 py-2 rounded-lg border mb-3 ${darkMode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-white'}`} placeholder="Enter question..." value={q.text} onChange={e => updateQuestion(qIdx, 'text', e.target.value)} />
+                                    
+                                    <label className="block text-xs font-bold mb-2 uppercase text-gray-500">Options</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                        {q.options.map((opt, oIdx) => (
+                                            <div key={oIdx} className="flex items-center gap-2">
+                                                <input type="radio" name={`correct-${qIdx}`} checked={q.correctIndex === oIdx} onChange={() => updateQuestion(qIdx, 'correctIndex', oIdx)} className="accent-green-500" />
+                                                <input required type="text" className={`flex-1 px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-white'}`} placeholder={`Option ${oIdx+1}`} value={opt} onChange={e => {
+                                                    const newOpts = [...q.options];
+                                                    newOpts[oIdx] = e.target.value;
+                                                    updateQuestion(qIdx, 'options', newOpts);
+                                                }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-green-600 dark:text-green-400"><CheckCircle size={12} className="inline mr-1"/> Select the radio button for the correct answer.</p>
+                                </div>
+                            ))}
+                         </div>
+
+                         <div className="pt-4 flex justify-end gap-3">
+                            <Button type="button" onClick={() => setShowExamModal(false)} className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-4 py-2 rounded-lg">Cancel</Button>
+                            <Button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Publish Exam</Button>
+                         </div>
+                      </form>
+                    </div>
+                  </motion.div>
+                )}
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {exams.map(exam => (
+                    <div key={exam.id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                      <h3 className="font-bold text-lg mb-1">{exam.title}</h3>
+                      <p className="text-sm text-gray-500 mb-4">{exam.questionsCount} Questions</p>
+                      <div className="flex justify-between items-center border-t pt-3 dark:border-slate-700">
+                         <span className="text-xs text-gray-400">Submissions: <span className="font-bold text-blue-500">{exam.submissions}</span></span>
+                         <button className="text-sm text-gray-500 hover:text-blue-500">View Results</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+               </div>
+            )}
+
+            {/* 5. CLASSWORK */}
             {activeTab === 'classwork' && (
                <div className={`p-6 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <div className="mb-6 border-b pb-4">
@@ -424,7 +712,7 @@ export const TeacherDashboard = () => {
                </div>
             )}
 
-            {/* 4. COMMUNICATION */}
+            {/* 6. COMMUNICATION */}
             {activeTab === 'communication' && (
               <div className={`p-6 rounded-xl border h-[600px] flex flex-col ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <div className="border-b pb-4 mb-4 flex justify-between items-center">
@@ -448,7 +736,7 @@ export const TeacherDashboard = () => {
               </div>
             )}
 
-            {/* --- 5. MY PROFILE SECTION --- */}
+            {/* --- 7. MY PROFILE SECTION --- */}
             {activeTab === 'profile' && (
               <div className="w-full relative">
                 {!isEditingProfile && (
