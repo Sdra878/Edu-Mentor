@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   BookOpen, Users, MessageSquare, Plus, Trash2, FileText, Send, 
   Upload, TrendingUp, CheckCircle, XCircle, Moon, Sun, Clock,
-  User, Edit3, MapPin, Calendar, GraduationCap, Mail, Phone, Globe, Brain, Camera, X, Save, ClipboardList, Calendar as CalendarIcon
+  User, Edit3, MapPin, Calendar, GraduationCap, Mail, Phone, Globe, Brain, Camera, X, Save, ClipboardList, Calendar as CalendarIcon, Search, StickyNote
 } from 'lucide-react';
 
 export const TeacherDashboard = () => {
@@ -21,8 +21,8 @@ export const TeacherDashboard = () => {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // Tabs State
-  const [activeTab, setActiveTab] = useState('overview');
+  // Tabs State - تعديل 1: التبويب الافتراضي البروفايل
+  const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
 
   // --- Data States ---
@@ -34,7 +34,6 @@ export const TeacherDashboard = () => {
   const [exams, setExams] = useState([]);
   const [showExamModal, setShowExamModal] = useState(false);
   
-  // تحديث الحالة لتكون فارغة للبداية (سنختار من القائمة)
   const [newExam, setNewExam] = useState({ 
     title: '', 
     course: '', 
@@ -42,10 +41,11 @@ export const TeacherDashboard = () => {
     questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0 }] 
   });
   
-  // --- NEW: WORKSHOPS STATES ---
+  // --- WORKSHOPS STATES ---
   const [workshops, setWorkshops] = useState([]);
   const [showWorkshopModal, setShowWorkshopModal] = useState(false);
-  const [workshopData, setWorkshopData] = useState({ title: '', description: '', date: '', location: '', capacity: '' });
+  const [selectedWorkshop, setSelectedWorkshop] = useState(null); // تعديل 6: لفتح تفاصيل الوركشوب
+  const [workshopData, setWorkshopData] = useState({ title: '', description: '', date: '', meeting_link: '' });
   
   // --- Profile States ---
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -61,7 +61,7 @@ export const TeacherDashboard = () => {
     country: '', 
     gradYear: '', 
     dob: '', 
-    bio: ''
+    bio: '' // تعديل 2: إضافة حقل البايو
   });
 
   const [interests, setInterests] = useState([]); 
@@ -70,16 +70,18 @@ export const TeacherDashboard = () => {
   // --- Forms States ---
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null); 
-  const [courseData, setCourseData] = useState({ 
-    title: '', 
-    description: '',
-    category: '',
-    level: '',
-    price: '',
-    duration_hours: ''
-  });
+  const [courseData, setCourseData] = useState({ title: '', description: '', category: '', level: '', price: '', duration_hours: '' });
   const [assignData, setAssignData] = useState({ title: '', dueDate: '' });
+  
+  // تعديل 8: حالات الرسائل (تحديد طالب وبحث)
   const [msgData, setMsgData] = useState({ text: '', receiverId: 'all' });
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [searchStudent, setSearchStudent] = useState('');
+
+  // تعديل 5: حالة إضافة ملاحظة للكورس
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteCourse, setNoteCourse] = useState(null);
+  const [noteText, setNoteText] = useState('');
 
   const [refresh, setRefresh] = useState(0);
 
@@ -93,12 +95,6 @@ export const TeacherDashboard = () => {
         const token = localStorage.getItem('token');
         if(!token) return;
 
-        // Mock Data للتجربة
-        setWorkshops([
-            { id: 1, title: 'Advanced React Patterns', date: '2023-11-15', location: 'Online', capacity: 50, enrolled: 12 }
-        ]);
-
-        // أ) جلب البروفايل
         const profileRes = await fetch('http://localhost:5000/api/teacher/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -113,10 +109,12 @@ export const TeacherDashboard = () => {
             years_experince: pData.years_experince || '',
             linkedin_url: pData.linkedin_url || '',
             cv_url: pData.cv_url || '',
+            university: pData.university || prev.university, // تعديل 2
+            country: pData.country || prev.country, // تعديل 2
+            bio: pData.bio || prev.bio // تعديل 2
           }));
         }
 
-        // ب) جلب الكورسات
         const coursesRes = await fetch('http://localhost:5000/api/courses', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -125,7 +123,6 @@ export const TeacherDashboard = () => {
           setCourses(coursesData);
         }
 
-        // ج) جلب الطلاب
         const studentsRes = await fetch('http://localhost:5000/api/teacher/my-students', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -134,13 +131,20 @@ export const TeacherDashboard = () => {
           setStudents(studentsData);
         }
 
-        // د) جلب الرسائل
         const msgRes = await fetch('http://localhost:5000/api/messages', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(msgRes.ok) {
           const msgsData = await msgRes.json();
           setMessages(msgsData);
+        }
+
+        const wsRes = await fetch('http://localhost:5000/api/workshops', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if(wsRes.ok) {
+          const wsData = await wsRes.json();
+          setWorkshops(wsData);
         }
 
       } catch (error) {
@@ -154,27 +158,64 @@ export const TeacherDashboard = () => {
 
   // === Handlers ===
 
-  // --- CREATE WORKSHOP HANDLER ---
-  const handleCreateWorkshop = (e) => {
+  const handleCreateWorkshop = async (e) => {
     e.preventDefault();
-    const newWorkshopItem = {
-        id: Date.now(),
-        ...workshopData,
-        enrolled: 0
-    };
-    setWorkshops([...workshops, newWorkshopItem]);
-    setShowWorkshopModal(false);
-    setWorkshopData({ title: '', description: '', date: '', location: '', capacity: '' });
-    alert("Workshop Created Successfully!");
+    const token = localStorage.getItem('token');
+    
+    try {
+      const res = await fetch('http://localhost:5000/api/workshops', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(workshopData)
+      });
+
+      if(res.ok) {
+        const newWs = await res.json();
+        setWorkshops([...workshops, newWs]);
+        setShowWorkshopModal(false);
+        setWorkshopData({ title: '', description: '', date: '', meeting_link: '' });
+        alert("Workshop Published Successfully!");
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to create workshop");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Server Error");
+    }
   };
 
-  // --- CREATE EXAM HANDLER (Fixed & Connected) ---
+  const handleDeleteWorkshop = async (wsId) => {
+    if(!confirm("Are you sure you want to delete this workshop?")) return;
+    
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://localhost:5000/api/workshops/${wsId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if(res.ok) {
+        setWorkshops(workshops.filter(ws => ws._id !== wsId));
+        alert("Workshop Deleted");
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to delete");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Server Error");
+    }
+  };
+
   const handleCreateExam = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
 
     try {
-      // 1. إنشاء الامتحان
       const examRes = await fetch('http://localhost:5000/api/exams', {
         method: 'POST',
         headers: {
@@ -182,13 +223,12 @@ export const TeacherDashboard = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          course: newExam.course, // يجب أن يكون ID
+          course: newExam.course,
           title: newExam.title,
           passing_score: Number(newExam.passing_score)
         })
       });
 
-      // --- معالجة الخطأ ---
       if (!examRes.ok) {
         let errorDetails = "Unknown Error";
         const contentType = examRes.headers.get("content-type");
@@ -209,14 +249,12 @@ export const TeacherDashboard = () => {
         }
 
         console.error("❌ Server Error Details:", errorDetails);
-        console.error("Status Code:", examRes.status);
         throw new Error(`Failed to create exam (${examRes.status}): ${errorDetails}`);
       }
       
       const createdExam = await examRes.json();
       const examId = createdExam._id;
 
-      // 2. إضافة الأسئلة
       const questionPromises = newExam.questions.map(q => {
         const correctAnswerText = q.options[q.correctIndex];
 
@@ -237,7 +275,6 @@ export const TeacherDashboard = () => {
 
       await Promise.all(questionPromises);
 
-      // 3. تحديث الواجهة
       const createdExamObj = {
         id: createdExam._id,
         title: newExam.title,
@@ -248,13 +285,7 @@ export const TeacherDashboard = () => {
       
       setExams([...exams, createdExamObj]);
       setShowExamModal(false);
-      setNewExam({ 
-        title: '', 
-        course: '', 
-        passing_score: 50, 
-        questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0 }] 
-      });
-      
+      setNewExam({ title: '', course: '', passing_score: 50, questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0 }] });
       alert("Exam Created Successfully & Saved to DB!");
 
     } catch (error) {
@@ -276,7 +307,6 @@ export const TeacherDashboard = () => {
     setNewExam({ ...newExam, questions: updatedQuestions });
   };
 
-  // حفظ البروفايل
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('token');
     try {
@@ -293,7 +323,10 @@ export const TeacherDashboard = () => {
           qualifications: profileData.qualifications,
           years_experince: profileData.years_experince, 
           linkedin_url: profileData.linkedin_url,
-          cv_url: profileData.cv_url
+          cv_url: profileData.cv_url,
+          university: profileData.university, // تعديل 2
+          country: profileData.country, // تعديل 2
+          bio: profileData.bio // تعديل 2
         })
       });
 
@@ -310,7 +343,6 @@ export const TeacherDashboard = () => {
     }
   };
 
-  // إضافة كورس
   const handleAddCourse = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -343,7 +375,6 @@ export const TeacherDashboard = () => {
     }
   };
 
-  // حذف كورس
   const handleDeleteCourse = async (id) => {
     if(confirm("Delete this course?")) {
       const token = localStorage.getItem('token');
@@ -361,7 +392,15 @@ export const TeacherDashboard = () => {
     }
   };
 
-  // إرسال رسالة
+  // تعديل 5: حفظ الملاحظة
+  const handleSaveNote = () => {
+    if(!noteText.trim()) return alert("Please write a note first");
+    alert(`Note saved for course: ${noteCourse.title}\nNote: ${noteText}`);
+    setShowNoteModal(false);
+    setNoteText('');
+    setNoteCourse(null);
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -381,7 +420,7 @@ export const TeacherDashboard = () => {
       if (res.ok) {
         const newMsg = await res.json();
         setMessages([...messages, newMsg]);
-        setMsgData({ text: '', receiverId: 'all' });
+        setMsgData({ ...msgData, text: '' });
       } else {
         alert("Failed to send message");
       }
@@ -390,7 +429,6 @@ export const TeacherDashboard = () => {
     }
   };
 
-  // إضافة واجب (مؤقت)
   const handleAddAssignment = async (e) => {
     e.preventDefault();
     if(!selectedCourse) return alert("Select a course first");
@@ -406,17 +444,18 @@ export const TeacherDashboard = () => {
   };
 
   const TabButton = ({ id, label, icon: Icon }) => (
-    <button onClick={() => setActiveTab(id)} className={`flex items-center gap-2 px-5 py-3 font-medium transition-all border-b-2 ${activeTab === id ? 'border-primary-600 text-primary-600 bg-primary-50 dark:bg-slate-800 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
+    <button onClick={() => setActiveTab(id)} className={`flex items-center gap-2 px-5 py-3 font-medium transition-all border-b-2 whitespace-nowrap ${activeTab === id ? 'border-primary-600 text-primary-600 bg-primary-50 dark:bg-slate-800 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
       <Icon size={18} /> {label}
     </button>
   );
 
   return (
     <div className={`p-6 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
+      {/* تعديل 4: تغيير الترحيب */}
       <header className="flex justify-between items-center mb-8">
         <div>
-          <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>Teacher Portal</h1>
-          <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">Welcome back, {profileData.full_name || user?.name || 'Teacher'}</p>
+          <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>Welcome, {profileData.full_name || user?.name || 'Teacher'}</h1>
+          <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">Manage your courses, students, and workshops</p>
         </div>
         <button onClick={() => setDarkMode(!darkMode)} className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-gray-200 text-gray-600'}`}>
           {darkMode ? <Sun size={20}/> : <Moon size={20}/>}
@@ -428,7 +467,8 @@ export const TeacherDashboard = () => {
         <TabButton id="overview" label="Overview" icon={TrendingUp} />
         <TabButton id="courses" label="My Courses" icon={BookOpen} />
         <TabButton id="workshops" label="Workshops" icon={CalendarIcon} />
-        <TabButton id="exams" label="Exams & Quizzes" icon={ClipboardList} />
+        {/* تعديل 7: Exom بدل Exams & Quizzes */}
+        <TabButton id="exams" label="Exam" icon={ClipboardList} />
         <TabButton id="classwork" label="Classwork" icon={Users} />
         <TabButton id="communication" label="Messages" icon={MessageSquare} />
       </div>
@@ -437,55 +477,30 @@ export const TeacherDashboard = () => {
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             
-            {/* 1. OVERVIEW */}
+            {/* 1. OVERVIEW - تعديل 3: ألوان هادية */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { title: "Total Courses", val: courses.length, color: "bg-blue-300 text-white border-blue-600 shadow-md dark:bg-slate-800 dark:border-slate-700", icon: BookOpen },
-                    { title: "Enrolled Students", val: students.length, color: "bg-emerald-300 text-white border-emerald-600 shadow-md dark:bg-slate-800 dark:border-slate-700", icon: Users },
-                    { title: "Pending Assignments", val: 0, color: "bg-amber-300 text-white border-amber-500 shadow-md dark:bg-slate-800 dark:border-slate-700", icon: FileText },
-                    { title: "Unread Messages", val: messages.length, color: "bg-purple-300 text-white border-purple-600 shadow-md dark:bg-slate-800 dark:border-slate-700", icon: MessageSquare }
+                    { title: "Total Courses", val: courses.length, color: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-slate-800 dark:text-blue-400 dark:border-slate-700", icon: BookOpen },
+                    { title: "Enrolled Students", val: students.length, color: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:border-slate-700", icon: Users },
+                    { title: "Total Workshops", val: workshops.length, color: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-slate-800 dark:text-amber-400 dark:border-slate-700", icon: CalendarIcon },
+                    { title: "Unread Messages", val: messages.length, color: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-slate-800 dark:text-purple-400 dark:border-slate-700", icon: MessageSquare }
                   ].map((item, i) => (
                     <motion.div key={i} whileHover={{ y: -5 }} className={`p-6 rounded-xl shadow-sm border ${item.color} flex items-center justify-between relative overflow-hidden group`}>
                       <div className="relative z-10">
                         <p className="text-sm opacity-90 font-medium">{item.title}</p>
                         <h3 className="text-3xl font-bold mt-2">{item.val}</h3>
                       </div>
-                      <div className="p-3 bg-white/20 rounded-lg relative z-10 group-hover:rotate-12 transition-transform"><item.icon size={28} /></div>
+                      <div className="p-3 bg-white/30 dark:bg-slate-700/30 rounded-lg relative z-10 group-hover:rotate-12 transition-transform"><item.icon size={28} /></div>
                       <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
                     </motion.div>
                   ))}
                 </div>
-
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                   <button onClick={() => setActiveTab('classwork')} className={`p-5 rounded-xl border flex items-start gap-4 hover:shadow-md transition-shadow text-left ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-slate-600' : 'bg-white border-gray-200 hover:shadow-lg'}`}>
-                      <div className={`p-3 rounded-lg ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><FileText size={24} /></div>
-                      <div>
-                        <h4 className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Create Assignment</h4>
-                        <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>Add homework for your students.</p>
-                      </div>
-                   </button>
-                   <button onClick={() => setActiveTab('communication')} className={`p-5 rounded-xl border flex items-start gap-4 hover:shadow-md transition-shadow text-left ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-slate-600' : 'bg-white border-gray-200 hover:shadow-lg'}`}>
-                      <div className={`p-3 rounded-lg ${darkMode ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-50 text-purple-600'}`}><MessageSquare size={24} /></div>
-                      <div>
-                        <h4 className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Send Announcement</h4>
-                        <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>Broadcast a message to the class.</p>
-                      </div>
-                   </button>
-                   <button onClick={() => setActiveTab('courses')} className={`p-5 rounded-xl border flex items-start gap-4 hover:shadow-md transition-shadow text-left ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-slate-600' : 'bg-white border-gray-200 hover:shadow-lg'}`}>
-                      <div className={`p-3 rounded-lg ${darkMode ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}><BookOpen size={24} /></div>
-                      <div>
-                        <h4 className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Manage Content</h4>
-                        <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>Upload new materials.</p>
-                      </div>
-                   </button>
-                </div>
               </div>
             )}
 
-            {/* 2. MANAGE COURSES */}
+            {/* 2. MANAGE COURSES - تعديل 5: إصلاح الأيقونات والملاحظات */}
             {activeTab === 'courses' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -493,25 +508,37 @@ export const TeacherDashboard = () => {
                   <Button onClick={() => setShowCourseForm(true)}><Plus size={16} className="me-2"/> Add New Course</Button>
                 </div>
 
-                {/* Modal Form */}
                 {showCourseForm && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className={`w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
                       <button onClick={() => setShowCourseForm(false)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500"><X size={24} /></button>
                       <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Create New Course</h2>
                       <form onSubmit={handleAddCourse} className="space-y-4">
-                        <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Title</label><input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.title} onChange={e => setCourseData({...courseData, title: e.target.value})} /></div>
-                        <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Description</label><textarea required rows="3" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.description} onChange={e => setCourseData({...courseData, description: e.target.value})} /></div>
+                        <div><label className="block text-sm font-medium mb-1">Title</label><input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.title} onChange={e => setCourseData({...courseData, title: e.target.value})} /></div>
+                        <div><label className="block text-sm font-medium mb-1">Description</label><textarea required rows="3" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.description} onChange={e => setCourseData({...courseData, description: e.target.value})} /></div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Category</label><input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.category} onChange={e => setCourseData({...courseData, category: e.target.value})} /></div>
-                          <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Level</label><select required className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.level} onChange={e => setCourseData({...courseData, level: e.target.value})}><option value="">Select Level</option><option value="Beginner">Beginner</option><option value="Intermediate">Intermediate</option><option value="Advanced">Advanced</option></select></div>
+                          <div><label className="block text-sm font-medium mb-1">Category</label><input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.category} onChange={e => setCourseData({...courseData, category: e.target.value})} /></div>
+                          <div><label className="block text-sm font-medium mb-1">Level</label><select required className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.level} onChange={e => setCourseData({...courseData, level: e.target.value})}><option value="">Select Level</option><option value="Beginner">Beginner</option><option value="Intermediate">Intermediate</option><option value="Advanced">Advanced</option></select></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Price ($)</label><input required type="number" min="0" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.price} onChange={e => setCourseData({...courseData, price: e.target.value})} /></div>
-                          <div><label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Duration (Hours)</label><input required type="number" min="1" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.duration_hours} onChange={e => setCourseData({...courseData, duration_hours: e.target.value})} /></div>
+                          <div><label className="block text-sm font-medium mb-1">Price ($)</label><input required type="number" min="0" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.price} onChange={e => setCourseData({...courseData, price: e.target.value})} /></div>
+                          <div><label className="block text-sm font-medium mb-1">Duration (Hours)</label><input required type="number" min="1" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={courseData.duration_hours} onChange={e => setCourseData({...courseData, duration_hours: e.target.value})} /></div>
                         </div>
                         <div className="pt-4 flex justify-end gap-3"><Button type="button" onClick={() => setShowCourseForm(false)} className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-4 py-2 rounded-lg">Cancel</Button><Button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Create Course</Button></div>
                       </form>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* تعديل 5: نافذة إضافة ملاحظة */}
+                {showNoteModal && noteCourse && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className={`w-full max-w-md rounded-2xl shadow-2xl p-6 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                      <button onClick={() => setShowNoteModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500"><X size={24}/></button>
+                      <h2 className={`text-xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}><StickyNote size={20}/> Add Note</h2>
+                      <p className="text-sm text-gray-500 mb-4">Course: <span className="font-bold text-gray-700 dark:text-gray-300">{noteCourse.title}</span></p>
+                      <textarea rows="5" value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Write your note here..." className={`w-full px-4 py-2 rounded-lg border mb-4 ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}></textarea>
+                      <div className="flex justify-end"><Button onClick={handleSaveNote} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Save Note</Button></div>
                     </div>
                   </motion.div>
                 )}
@@ -523,9 +550,10 @@ export const TeacherDashboard = () => {
                       <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>{c.description}</p>
                       <div className="flex justify-between items-center mt-4">
                         <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</span>
+                        {/* تعديل 5: إصلاح الـ hover وحفظ الملاحظة */}
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={()=>setSelectedCourse(c)} className="text-blue-500 hover:bg-blue-50 p-2 rounded"><FileText size={16}/></button>
-                          <button onClick={()=>handleDeleteCourse(c._id || c.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button>
+                          <button onClick={() => { setNoteCourse(c); setNoteText(''); setShowNoteModal(true); }} className="text-blue-500 hover:bg-blue-100 dark:hover:bg-slate-700 p-2 rounded"><FileText size={16}/></button>
+                          <button onClick={()=>handleDeleteCourse(c._id || c.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 p-2 rounded"><Trash2 size={16}/></button>
                         </div>
                       </div>
                     </div>
@@ -534,7 +562,7 @@ export const TeacherDashboard = () => {
               </div>
             )}
 
-            {/* 3. WORKSHOPS SECTION */}
+            {/* 3. WORKSHOPS SECTION - تعديل 6: الدخول للتفاصيل */}
             {activeTab === 'workshops' && (
                <div className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -542,7 +570,6 @@ export const TeacherDashboard = () => {
                   <Button onClick={() => setShowWorkshopModal(true)}><Plus size={16} className="me-2"/> Announce Workshop</Button>
                 </div>
 
-                {/* Create Workshop Modal */}
                 {showWorkshopModal && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className={`w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
@@ -553,24 +580,64 @@ export const TeacherDashboard = () => {
                         <div><label className="block text-sm font-medium mb-1">Description</label><textarea required rows="3" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.description} onChange={e => setWorkshopData({...workshopData, description: e.target.value})} /></div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className="block text-sm font-medium mb-1">Date</label><input required type="date" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.date} onChange={e => setWorkshopData({...workshopData, date: e.target.value})} /></div>
-                            <div><label className="block text-sm font-medium mb-1">Location</label><input required type="text" placeholder="e.g. Online, Room 101" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.location} onChange={e => setWorkshopData({...workshopData, location: e.target.value})} /></div>
+                            <div><label className="block text-sm font-medium mb-1">Meeting Link</label><input required type="url" placeholder="e.g. https://zoom.us/j/..." className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.meeting_link} onChange={e => setWorkshopData({...workshopData, meeting_link: e.target.value})} /></div>
                         </div>
-                        <div><label className="block text-sm font-medium mb-1">Capacity</label><input required type="number" min="1" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={workshopData.capacity} onChange={e => setWorkshopData({...workshopData, capacity: e.target.value})} /></div>
                         <div className="pt-4 flex justify-end gap-3"><Button type="button" onClick={() => setShowWorkshopModal(false)} className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-4 py-2 rounded-lg">Cancel</Button><Button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Publish Workshop</Button></div>
                       </form>
                     </div>
                   </motion.div>
                 )}
 
+                {/* تعديل 6: نافذة تفاصيل الوركشوب */}
+                {selectedWorkshop && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className={`w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                      <button onClick={() => setSelectedWorkshop(null)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500"><X size={24}/></button>
+                      <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{selectedWorkshop.title}</h2>
+                      <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {new Date(selectedWorkshop.date).toLocaleDateString()}</div>
+                      <p className={`mb-4 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>{selectedWorkshop.description}</p>
+                      <a href={selectedWorkshop.meeting_link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-2 mb-6"><Globe size={16}/> Join Meeting Link</a>
+                      
+                      <div className="border-t dark:border-slate-700 pt-4">
+                        <h4 className="font-bold mb-3">Registered Students ({selectedWorkshop.attendees ? selectedWorkshop.attendees.length : 0})</h4>
+                        {selectedWorkshop.attendees && selectedWorkshop.attendees.length > 0 ? (
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                             {selectedWorkshop.attendees.map((student, idx) => {
+                                const isObject = typeof student === 'object' && student !== null;
+                                const displayName = isObject ? (student.name || student.full_name || (student.email ? student.email.split('@')[0] : 'Student')) : `Student ${idx + 1}`;
+                                const displayEmail = isObject ? student.email : null;
+                                return (
+                                  <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg text-sm ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'}`}><User size={16}/></div>
+                                    <div>
+                                      <p className="font-semibold">{displayName}</p>
+                                      {displayEmail && <p className="text-xs text-gray-500">{displayEmail}</p>}
+                                    </div>
+                                  </div>
+                                );
+                             })}
+                          </div>
+                        ) : <p className="text-sm text-gray-400">No students registered yet.</p>}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {workshops.map(ws => (
-                    <div key={ws.id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                      <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {ws.date}</div>
+                    <div key={ws._id} onClick={() => setSelectedWorkshop(ws)} className={`p-6 rounded-xl border shadow-sm relative group cursor-pointer transition-all hover:shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-slate-500' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
+                      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteWorkshop(ws._id); }} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 p-2 rounded"><Trash2 size={16}/></button>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {new Date(ws.date).toLocaleDateString()}</div>
                       <h3 className="font-bold text-lg mb-1">{ws.title}</h3>
                       <p className="text-sm text-gray-500 mb-4 line-clamp-2">{ws.description}</p>
-                      <div className="flex justify-between items-center text-xs text-gray-400 border-t pt-3 dark:border-slate-700">
-                         <span>{ws.location}</span>
-                         <span>{ws.enrolled} / {ws.capacity} Enrolled</span>
+                      
+                      <div className="border-t pt-3 dark:border-slate-700 mt-2">
+                         <div className="flex justify-between items-center text-xs text-gray-400">
+                            <span className="flex items-center gap-1"><Globe size={12}/> {ws.meeting_link ? 'Online' : 'Link N/A'}</span>
+                            <span className="flex items-center gap-1"><Users size={12}/> {ws.attendees ? ws.attendees.length : 0} Registered</span>
+                         </div>
                       </div>
                     </div>
                   ))}
@@ -582,11 +649,10 @@ export const TeacherDashboard = () => {
             {activeTab === 'exams' && (
                <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Exams & Quizzes</h2>
+                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Exams</h2>
                   <Button onClick={() => setShowExamModal(true)}><Plus size={16} className="me-2"/> Create Exam</Button>
                 </div>
 
-                {/* Create Exam Modal */}
                 {showExamModal && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className={`w-full max-w-3xl rounded-2xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
@@ -594,30 +660,17 @@ export const TeacherDashboard = () => {
                       <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Create New Exam</h2>
                       
                       <form onSubmit={handleCreateExam} className="space-y-6">
-                         {/* Exam Basic Details (Updated) */}
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Exam Title</label>
                                 <input required type="text" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} />
                             </div>
-                            
-                            {/* UPDATED: Course Selection Dropdown */}
                             <div>
                                 <label className="block text-sm font-medium mb-1">Select Course</label>
-                                <select 
-                                    required 
-                                    className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
-                                    value={newExam.course}
-                                    onChange={e => setNewExam({...newExam, course: e.target.value})}
-                                >
+                                <select required className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={newExam.course} onChange={e => setNewExam({...newExam, course: e.target.value})}>
                                     <option value="">-- Choose a Course --</option>
-                                    {courses.map(c => (
-                                        <option key={c._id} value={c._id}>
-                                            {c.title}
-                                        </option>
-                                    ))}
+                                    {courses.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                                 </select>
-                                {courses.length === 0 && <p className="text-xs text-red-500 mt-1">No courses found. Please create one first in "My Courses" tab.</p>}
                             </div>
                          </div>
                          <div>
@@ -625,7 +678,6 @@ export const TeacherDashboard = () => {
                             <input required type="number" min="1" max="100" className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`} value={newExam.passing_score} onChange={e => setNewExam({...newExam, passing_score: e.target.value})} />
                          </div>
                          
-                         {/* Questions Section */}
                          <div className="space-y-4">
                             <div className="flex justify-between items-center">
                                 <h3 className="font-bold text-lg">Questions</h3>
@@ -712,13 +764,54 @@ export const TeacherDashboard = () => {
                </div>
             )}
 
-            {/* 6. COMMUNICATION */}
+            {/* 6. COMMUNICATION - تعديل 8: اختيار طالب وبحث */}
             {activeTab === 'communication' && (
-              <div className={`p-6 rounded-xl border h-[600px] flex flex-col ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <div className="border-b pb-4 mb-4 flex justify-between items-center">
-                    <h3 className="font-bold">Messages</h3>
+              <div className={`rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                
+                {/* Sidebar - Students */}
+                <div className={`w-1/3 border-r flex flex-col ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="p-4 border-b dark:border-slate-700">
+                    <h3 className="font-bold mb-3">Students</h3>
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-2.5 text-gray-400"/>
+                      <input 
+                        type="text" 
+                        placeholder="Search student..." 
+                        value={searchStudent}
+                        onChange={(e) => setSearchStudent(e.target.value)}
+                        className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300'}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <div 
+                      onClick={() => { setSelectedStudent(null); setMsgData({...msgData, receiverId: 'all'}); }} 
+                      className={`p-3 cursor-pointer border-b dark:border-slate-700 ${!selectedStudent ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
+                    >
+                      <p className="font-semibold text-sm">All Students</p>
+                    </div>
+                    {students
+                      .filter(s => (s.name || s.full_name || '').toLowerCase().includes(searchStudent.toLowerCase()))
+                      .map(s => (
+                        <div 
+                          key={s._id} 
+                          onClick={() => { setSelectedStudent(s); setMsgData({...msgData, receiverId: s._id}); }} 
+                          className={`p-3 cursor-pointer border-b dark:border-slate-700 flex items-center gap-2 ${selectedStudent?._id === s._id ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400"><User size={16}/></div>
+                          <p className="font-medium text-sm">{s.name || s.full_name || 'Student'}</p>
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+
+                {/* Chat Area */}
+                <div className="w-2/3 flex flex-col">
+                  <div className="border-b p-4 dark:border-slate-700">
+                    <h3 className="font-bold">{selectedStudent ? `Chat with ${selectedStudent.name || selectedStudent.full_name}` : 'General Chat'}</h3>
+                  </div>
+                  <div className="flex-1 p-4 overflow-y-auto space-y-4">
                     {messages.length === 0 ? <p className="text-center text-gray-400 mt-10">No messages yet.</p> :
                         messages.map(m => (
                             <div key={m._id || m.id} className={`flex flex-col ${m.senderId === user.id ? 'items-end' : 'items-start'}`}>
@@ -728,17 +821,18 @@ export const TeacherDashboard = () => {
                             </div>
                         ))
                     }
-                </div>
-                <form onSubmit={handleSendMessage} className="flex gap-2">
-                    <input required placeholder="Type a message..." className={`flex-1 px-4 py-2 border rounded-lg ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white'}`} value={msgData.text} onChange={e=>setMsgData({...msgData, text:e.target.value})} />
+                  </div>
+                  <form onSubmit={handleSendMessage} className="p-4 border-t dark:border-slate-700 flex gap-2">
+                    <input required placeholder="Type a message..." className={`flex-1 px-4 py-2 border rounded-lg ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300'}`} value={msgData.text} onChange={e=>setMsgData({...msgData, text:e.target.value})} />
                     <Button type="submit"><Send size={18}/></Button>
-                </form>
+                  </form>
+                </div>
               </div>
             )}
 
-            {/* --- 7. MY PROFILE SECTION --- */}
+            {/* --- 7. MY PROFILE SECTION --- تعديل 2: إضافة داتا إضافية */}
             {activeTab === 'profile' && (
-              <div className="w-full relative">
+               <div className="w-full relative">
                 {!isEditingProfile && (
                   <div className="w-full">
                     <div className="h-32 md:h-60 w-full bg-gradient-to-r from-black-600 via-primary-600 to-blue-600 relative">
@@ -754,8 +848,8 @@ export const TeacherDashboard = () => {
                                 <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{profileData.full_name || user?.name}</h2>
                                 <p className="text-xl text-primary-600 dark:text-primary-400 font-medium mt-1">{profileData.specialization}</p>
                                 <div className="flex flex-col md:flex-row items-center gap-4 mt-3 text-gray-600 dark:text-slate-400 text-sm">
-                                    <span className="flex items-center gap-1"><MapPin size={16} className="text-primary-500"/> {profileData.university}, {profileData.country}</span>
-                                    <span className="hidden md:inline-block w-1 h-1 bg-gray-400 rounded-full"></span>
+                                    {profileData.university && <span className="flex items-center gap-1"><GraduationCap size={16} className="text-primary-500"/> {profileData.university}</span>}
+                                    {profileData.country && <span className="flex items-center gap-1"><MapPin size={16} className="text-primary-500"/> {profileData.country}</span>}
                                     <span className="flex items-center gap-1"><Calendar size={16} className="text-primary-500"/> {profileData.years_experince} Years Experience</span>
                                 </div>
                             </div>
@@ -766,8 +860,14 @@ export const TeacherDashboard = () => {
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div className="lg:col-span-2 space-y-8">
+                                {profileData.bio && (
+                                  <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                                      <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>Bio</h3>
+                                      <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.bio}</p>
+                                  </section>
+                                )}
                                 <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>About Me</h3>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>Qualifications</h3>
                                     <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.qualifications}</p>
                                 </section>
                             </div>
@@ -786,7 +886,6 @@ export const TeacherDashboard = () => {
                   </div>
                 )}
 
-                {/* === EDIT MODE === */}
                 {isEditingProfile && (
                   <div className="max-w-6xl mx-auto px-6 py-8">
                     <div className={`rounded-3xl shadow-2xl overflow-hidden border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -809,6 +908,10 @@ export const TeacherDashboard = () => {
                                             <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label><input value={profileData.full_name} onChange={(e) => setProfileData({...profileData, full_name: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
                                             <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label><input value={profileData.phone} onChange={(e) => setProfileData({...profileData, phone: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
                                             <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn URL</label><input value={profileData.linkedin_url} onChange={(e) => setProfileData({...profileData, linkedin_url: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
+                                            {/* تعديل 2: إضافة حقول البايو والجامعة والبلد */}
+                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">University</label><input value={profileData.university} onChange={(e) => setProfileData({...profileData, university: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
+                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country</label><input value={profileData.country} onChange={(e) => setProfileData({...profileData, country: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
+                                            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bio</label><textarea rows="4" value={profileData.bio} onChange={(e) => setProfileData({...profileData, bio: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}></textarea></div>
                                         </div>
                                     </div>
                                     <div>
@@ -825,7 +928,6 @@ export const TeacherDashboard = () => {
                     </div>
                   </div>
                 )}
-
               </div>
             )}
 

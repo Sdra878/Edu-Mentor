@@ -6,7 +6,7 @@ import {
   BookOpen, User, Briefcase, Award, Play, CheckCircle, 
   Upload, Brain, Moon, Sun, Camera, MapPin, 
   GraduationCap, Mail, Calendar, Phone, Globe, FileText, 
-  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon
+  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon, ArrowLeft
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -27,10 +27,7 @@ export const StudentDashboard = () => {
   const [cvFile, setCvFile] = useState(null); 
   
   // --- EXAMS STATES ---
-  // ملاحظة: هنا نضع بيانات وهمية للعرض في القائمة، ولكن عند الضغط سنقوم بالجلب من الباك إند
   const [exams, setExams] = useState([
-      // يمكنك إضافة الـ ID الخاص بالامتحان الذي أنشأته في لوحة المعلم هنا لتجربته
-      // مثال: { id: "YOUR_EXAM_ID_FROM_DB", title: 'Exam from Backend', questions: [] }
       { 
           id: 1, 
           title: 'React Basics Quiz (Mock)', 
@@ -42,6 +39,7 @@ export const StudentDashboard = () => {
   ]); 
   const [currentExam, setCurrentExam] = useState(null); 
   const [examAnswers, setExamAnswers] = useState({});
+  const [examResult, setExamResult] = useState(null); // NEW: To show immediate result
   
   // --- CERTIFICATE STATE ---
   const [certificateModal, setCertificateModal] = useState(null); 
@@ -49,6 +47,9 @@ export const StudentDashboard = () => {
   // --- NEW: WORKSHOPS STATES ---
   const [workshops, setWorkshops] = useState([]);
   const [registeredWorkshops, setRegisteredWorkshops] = useState([]);
+  
+  // --- NEW: COURSE PLAYER STATE ---
+  const [selectedCourse, setSelectedCourse] = useState(null); // To track YouTube-style view
   
   // Data States
   const [enrollments, setEnrollments] = useState([]); 
@@ -302,10 +303,9 @@ export const StudentDashboard = () => {
   // === EXAM HANDLERS (Connected to Backend) ===
   const startExam = async (exam) => {
       const token = localStorage.getItem('token');
+      setExamResult(null); // Reset previous result
       
       try {
-          // التحقق هل الامتحان حقيقي من الباك إند أم وهمي
-          // إذا كان الـ ID طويل (MongoDB ID) سنقوم بالجلب، وإلا سنستخدم البيانات المحلية
           if (exam.id && typeof exam.id === 'string' && exam.id.length > 5) {
               const res = await fetch(`http://localhost:5000/api/exams/${exam.id}`, {
                   headers: { 'Authorization': `Bearer ${token}` }
@@ -313,15 +313,12 @@ export const StudentDashboard = () => {
 
               if (res.ok) {
                   const data = await res.json();
-                  
-                  // تحويل البيانات القادمة من الباك إند لتناسب شكل الواجهة الأمامية
                   const formattedExam = {
                       id: data.exam._id,
                       title: data.exam.title,
                       questions: data.questions.map(q => ({
                           text: q.text,
                           options: q.options,
-                          // الباك إند يعيد correct_answer كنص، نحتاج لإيجاد رقمه (index)
                           correctIndex: q.options.indexOf(q.correct_answer) 
                       }))
                   };
@@ -331,7 +328,6 @@ export const StudentDashboard = () => {
                   alert("Failed to load exam questions.");
               }
           } else {
-              // بيانات وهمية محلية
               setCurrentExam(exam);
               setExamAnswers({});
           }
@@ -357,19 +353,39 @@ export const StudentDashboard = () => {
       });
       const score = Math.round((correctCount / currentExam.questions.length) * 100);
       
-      alert(`Exam Submitted! Your Score: ${score}%`);
-      setCurrentExam(null);
+      // Set result state instead of alerting immediately
+      setExamResult({ score, passed: score > 60 });
       
-      // إزالة الامتحان من القائمة (للتجربة فقط)
-      setExams(exams.filter(e => e.id !== currentExam.id));
+      // Keep current exam active in background to show result over it or clear it?
+      // Let's keep it to show the context, but user can close result to go back.
+  };
+
+  // --- COURSE PLAYER HANDLERS ---
+  const handleFinishCourse = (course) => {
+      if (window.confirm("Are you sure you want to mark this course as complete? You will receive a certificate.")) {
+          // 1. Remove from Active Enrollments
+          setActiveEnrollments(activeEnrollments.filter(e => e.course._id !== course._id));
+          
+          // 2. Add to Completed Enrollments
+          const newCompletion = {
+              _id: Date.now(),
+              completed_at: new Date(),
+              course: course
+          };
+          setEnrollments([...enrollments, newCompletion]);
+          
+          // 3. Open Certificate
+          setCertificateModal(course);
+          
+          // 4. Close Player
+          setSelectedCourse(null);
+      }
   };
 
   // --- NEW: WORKSHOP REGISTRATION HANDLER ---
   const handleRegisterWorkshop = (workshopId) => {
       if(registeredWorkshops.includes(workshopId)) return;
       setRegisteredWorkshops([...registeredWorkshops, workshopId]);
-      
-      // Update enrolled count locally (mock update)
       setWorkshops(workshops.map(w => w.id === workshopId ? {...w, enrolled: w.enrolled + 1} : w));
       alert("Registered Successfully!");
   };
@@ -395,6 +411,7 @@ export const StudentDashboard = () => {
       onClick={() => { 
         setActiveTab(id); 
         setIsEditingProfile(false); 
+        setSelectedCourse(null); // Reset player when switching tabs
       }} 
       className={`relative flex items-center gap-2 px-6 py-4 font-medium transition-all duration-300 
         ${activeTab === id 
@@ -448,8 +465,9 @@ export const StudentDashboard = () => {
               <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                 Student Portal
               </h1>
+              {/* UPDATED: Shows real name instead of just 'Student' */}
               <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">
-                Welcome, {user?.name || 'Student'}
+                Welcome, {profileData.name || user?.name || 'Student'}
               </p>
             </div>
             <button 
@@ -466,7 +484,7 @@ export const StudentDashboard = () => {
         <div className="">
             <div className="flex overflow-x-auto gap-2 scrollbar-hide">
                 <TabButton id="profile" label="My Profile" icon={User} />
-                <TabButton id="courses" label="My Courses (CV)" icon={BookOpen} />
+                <TabButton id="courses" label="My Courses" icon={BookOpen} />
                 <TabButton id="workshops" label="Workshops" icon={CalendarIcon} />
                 <TabButton id="exams" label="Exams" icon={ClipboardList} />
                 <TabButton id="internships" label="Internships" icon={Briefcase} />
@@ -488,7 +506,7 @@ export const StudentDashboard = () => {
             className="w-full px-6"
           >
             
-            {/* --- 1. MY PROFILE SECTION --- */}
+            {/* --- 1. MY PROFILE SECTION (UNCHANGED) --- */}
             {activeTab === 'profile' && (
               <div className="w-full relative">
                 {!isEditingProfile && (
@@ -772,7 +790,7 @@ export const StudentDashboard = () => {
               </div>
             )}
 
-            {/* --- 2. WORKSHOPS SECTION --- */}
+            {/* --- 2. WORKSHOPS SECTION (UNCHANGED) --- */}
             {activeTab === 'workshops' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 no-print">
                     <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
@@ -815,119 +833,176 @@ export const StudentDashboard = () => {
                 </div>
             )}
 
-            {/* --- 3. COURSES SECTION --- */}
+            {/* --- 3. COURSES SECTION (UPDATED: YouTube Style & Player) --- */}
             {activeTab === 'courses' && (
               <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
                  
-                 {/* قسم البحث */}
-                 <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Search size={20}/> Find New Courses</h3>
-                    <div className="flex gap-4">
-                      <input 
-                        type="text" 
-                        placeholder="Search course title..." 
-                        className={`flex-1 px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200'}`}
-                        value={searchTerm}
-                        onChange={e=>setSearchTerm(e.target.value)}
-                        onKeyDown={e=>e.key==='Enter' && handleSearch()}
-                      />
-                      <button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl font-bold transition-colors">Search</button>
-                    </div>
-                 </div>
-
-                 {searchResults.length > 0 && (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-                      {searchResults.map(course => (
-                        <div key={course._id} className={`p-5 rounded-xl border flex flex-col justify-between ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
-                          <div>
-                            <h4 className="font-bold text-lg mb-1">{course.title}</h4>
-                            <p className="text-xs text-gray-500 mb-2">Teacher: {course.teacher?.name || 'Unknown'}</p>
-                            <p className="text-sm text-gray-400 line-clamp-2">{course.description}</p>
-                          </div>
-                          <button onClick={() => handleEnroll(course._id)} className="mt-4 w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"><Plus size={16} /> Enroll Now</button>
-                        </div>
-                      ))}
-                    </div>
-                 )}
-
-                 {/* قسم الكورسات النشطة */}
-                 <div>
-                    <h3 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Active Courses</h3>
-                    {activeEnrollments.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8 border border-dashed rounded-xl">No active enrollments.</p>
-                    ) : (
-                        <div className="grid md:grid-cols-2 gap-6">
-                          {activeEnrollments.map(enr => (
-                            <div key={enr._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                              <div className="flex justify-between items-start mb-4">
-                                <div>
-                                  <h4 className="font-bold text-lg">{enr.course?.title}</h4>
-                                  <p className="text-xs text-gray-500">Teacher: {enr.course?.teacher?.name}</p>
-                                </div>
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${enr.completed ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                  {enr.completed ? 'Completed' : 'In Progress'}
-                                </span>
-                              </div>
-                              
-                              <div className="mb-4">
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span>Progress</span>
-                                  <span>{enr.progress || 0}%</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-slate-700">
-                                  <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${enr.progress || 0}%` }}></div>
-                                </div>
-                              </div>
-
-                              <div className="flex gap-2 mt-4">
-                                <button className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors">
-                                    + Resume Learning
-                                </button>
-                              </div>
+                {/* A. COURSE PLAYER VIEW (NEW) */}
+                {selectedCourse ? (
+                    <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        {/* Video Placeholder Area */}
+                        <div className="w-full aspect-video bg-black flex items-center justify-center relative group">
+                            <Play size={64} className="text-white/50 group-hover:text-white transition-colors" />
+                            <div className="absolute bottom-4 left-4 text-white">
+                                <h2 className="text-2xl font-bold drop-shadow-md">{selectedCourse.course?.title || selectedCourse.title}</h2>
+                                <p className="text-sm opacity-80">Lesson 1 of {selectedCourse.course?.duration_hours || 10}</p>
                             </div>
-                          ))}
                         </div>
-                    )}
-                 </div>
 
-                 {/* قسم الكورسات المكتملة + الشهادات */}
-                 <div>
-                    <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Completed Courses (CV)</h2>
-                    {enrollments.length === 0 ? (
-                        <div className="text-center py-20 text-gray-500">
-                          <p>No courses completed yet.</p>
-                        </div>
-                    ) : (
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                           {enrollments.map((item, index) => (
-                               <div key={index} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                   <div className="flex items-center gap-2 mb-2">
-                                       <CheckCircle className="text-green-500" size={20} />
-                                       <h3 className="font-bold text-lg">{item.course?.title || "Course Title"}</h3>
-                                   </div>
-                                   <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
-                                       Completed on: {new Date(item.completed_at).toLocaleDateString()}
-                                   </p>
-                                   {/* CERTIFICATE BUTTON */}
-                                   <button 
-                                      onClick={() => setCertificateModal(item.course)}
-                                      className="w-full mt-2 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                                   >
-                                      <Award size={16}/> View Certificate
-                                   </button>
-                               </div>
-                           ))}
-                        </div>
-                    )}
-                 </div>
+                        {/* Player Controls & Info */}
+                        <div className="p-6">
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <h1 className="text-3xl font-bold mb-2 text-slate-800 dark:text-white">{selectedCourse.course?.title || selectedCourse.title}</h1>
+                                    <p className="text-gray-500 dark:text-slate-400">Instructor: {selectedCourse.course?.teacher?.name || 'Unknown'}</p>
+                                </div>
+                                <button 
+                                    onClick={() => setSelectedCourse(null)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg font-medium text-sm transition-colors"
+                                >
+                                    <ArrowLeft size={16}/> Back to Courses
+                                </button>
+                            </div>
 
+                            {/* Course Syllabus (Mock) */}
+                            <div className={`p-6 rounded-xl mb-8 ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                                <h3 className="font-bold text-lg mb-4">Course Content</h3>
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="flex items-center justify-between p-3 border border-gray-200 dark:border-slate-600 rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <CheckCircle size={18} className="text-green-500" />
+                                                <span className="font-medium">Module {i}: Introduction to Concepts</span>
+                                            </div>
+                                            <span className="text-sm text-gray-500">15:00</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Finish Course Button */}
+                            <div className="flex justify-end">
+                                <button 
+                                    onClick={() => handleFinishCourse(selectedCourse.course || selectedCourse)}
+                                    className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-bold shadow-lg shadow-green-500/30 transition-all flex items-center gap-2 transform hover:scale-105"
+                                >
+                                    <Award size={20} /> Finish Course & Get Certificate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    /* B. LIST VIEW (Original Logic) */
+                    <>
+                         {/* قسم البحث */}
+                        <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Search size={20}/> Find New Courses</h3>
+                            <div className="flex gap-4">
+                            <input 
+                                type="text" 
+                                placeholder="Search course title..." 
+                                className={`flex-1 px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200'}`}
+                                value={searchTerm}
+                                onChange={e=>setSearchTerm(e.target.value)}
+                                onKeyDown={e=>e.key==='Enter' && handleSearch()}
+                            />
+                            <button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl font-bold transition-colors">Search</button>
+                            </div>
+                        </div>
+
+                        {searchResults.length > 0 && (
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
+                            {searchResults.map(course => (
+                                <div key={course._id} className={`p-5 rounded-xl border flex flex-col justify-between ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                <div>
+                                    <h4 className="font-bold text-lg mb-1">{course.title}</h4>
+                                    <p className="text-xs text-gray-500 mb-2">Teacher: {course.teacher?.name || 'Unknown'}</p>
+                                    <p className="text-sm text-gray-400 line-clamp-2">{course.description}</p>
+                                </div>
+                                <button onClick={() => handleEnroll(course._id)} className="mt-4 w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"><Plus size={16} /> Enroll Now</button>
+                                </div>
+                            ))}
+                            </div>
+                        )}
+
+                        {/* قسم الكورسات النشطة */}
+                        <div>
+                            <h3 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Active Courses</h3>
+                            {activeEnrollments.length === 0 ? (
+                                <p className="text-gray-500 text-center py-8 border border-dashed rounded-xl">No active enrollments.</p>
+                            ) : (
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {activeEnrollments.map(enr => (
+                                    <div key={enr._id} className={`p-4 rounded-xl border shadow-sm hover:shadow-lg transition-all cursor-pointer group ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
+                                        onClick={() => setSelectedCourse(enr)}
+                                    >
+                                        <div className="aspect-video bg-gray-200 dark:bg-slate-700 rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
+                                            <Play size={40} className="text-white/70 group-hover:scale-110 transition-transform" />
+                                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                                        </div>
+                                        <div className="px-1">
+                                            <h4 className="font-bold text-lg mb-1 truncate">{enr.course?.title}</h4>
+                                            <p className="text-xs text-gray-500 mb-3">Teacher: {enr.course?.teacher?.name}</p>
+                                            
+                                            <div className="mb-2">
+                                                <div className="flex justify-between text-xs mb-1">
+                                                    <span>Progress</span>
+                                                    <span>{enr.progress || 0}%</span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-1.5 dark:bg-slate-700">
+                                                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" style={{ width: `${enr.progress || 0}%` }}></div>
+                                                </div>
+                                            </div>
+
+                                            <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                                Resume Learning
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* قسم الكورسات المكتملة + الشهادات */}
+                        <div>
+                            <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Completed Courses (CV)</h2>
+                            {enrollments.length === 0 ? (
+                                <div className="text-center py-20 text-gray-500">
+                                <p>No courses completed yet.</p>
+                                </div>
+                            ) : (
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {enrollments.map((item, index) => (
+                                    <div key={index} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <CheckCircle className="text-green-500" size={20} />
+                                            <h3 className="font-bold text-lg">{item.course?.title || "Course Title"}</h3>
+                                        </div>
+                                        <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                                            Completed on: {new Date(item.completed_at).toLocaleDateString()}
+                                        </p>
+                                        {/* CERTIFICATE BUTTON */}
+                                        <button 
+                                        onClick={() => setCertificateModal(item.course)}
+                                        className="w-full mt-2 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                        >
+                                        <Award size={16}/> View Certificate
+                                        </button>
+                                    </div>
+                                ))}
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
               </div>
             )}
 
-            {/* --- 4. EXAMS SECTION --- */}
+            {/* --- 4. EXAMS SECTION (UPDATED: Immediate Results) --- */}
             {activeTab === 'exams' && (
                 <div className="max-w-4xl mx-auto px-6 py-8 no-print">
-                    {!currentExam ? (
+                    {!currentExam && !examResult ? (
                         <div>
                             <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
                             {exams.length === 0 ? (
@@ -947,6 +1022,30 @@ export const StudentDashboard = () => {
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    ) : examResult ? (
+                        /* RESULT VIEW */
+                        <div className={`max-w-md mx-auto p-8 rounded-2xl border shadow-2xl text-center ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 ${examResult.passed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                {examResult.passed ? <CheckCircle size={40} /> : <X size={40} />}
+                            </div>
+                            <h2 className={`text-3xl font-bold mb-2 ${examResult.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                {examResult.passed ? 'Passed!' : 'Failed'}
+                            </h2>
+                            <p className="text-gray-500 dark:text-slate-400 mb-6">You scored</p>
+                            <div className="text-5xl font-extrabold text-slate-800 dark:text-white mb-8">{examResult.score}%</div>
+                            
+                            <div className="p-4 rounded-lg bg-gray-50 dark:bg-slate-700/50 mb-8">
+                                <p className="text-sm text-gray-500">
+                                    {examResult.score >= 60 
+                                        ? "Congratulations! You have successfully passed the exam." 
+                                        : "Unfortunately, you did not meet the passing grade of 60%. Please review the material and try again."}
+                                </p>
+                            </div>
+
+                            <Button onClick={() => { setCurrentExam(null); setExamResult(null); }}>
+                                Back to Exams List
+                            </Button>
                         </div>
                     ) : (
                         /* TAKING EXAM VIEW */
@@ -986,7 +1085,7 @@ export const StudentDashboard = () => {
                 </div>
             )}
 
-            {/* --- 5. INTERNSHIPS SECTION --- */}
+            {/* --- 5. INTERNSHIPS SECTION (UNCHANGED) --- */}
             {activeTab === 'internships' && (
               <div className="max-w-7xl mx-auto px-6 py-8 no-print">
                 <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
@@ -1030,7 +1129,7 @@ export const StudentDashboard = () => {
               </div>
             )}
 
-            {/* --- 6. TRAINING SECTION --- */}
+            {/* --- 6. TRAINING SECTION (UNCHANGED) --- */}
             {activeTab === 'training' && (
               <div className="max-w-6xl mx-auto px-6 py-8 no-print">
                 <div className={`p-8 rounded-3xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -1080,7 +1179,7 @@ export const StudentDashboard = () => {
                 </div>
               </div>
             )}
-                        {/* --- NEW: INVITATIONS SECTION --- */}
+                        {/* --- NEW: INVITATIONS SECTION (UNCHANGED) --- */}
                         {activeTab === 'invitations' && (
                 <div className="max-w-5xl mx-auto px-6 py-8 no-print">
                     <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Invitations</h2>
@@ -1139,7 +1238,7 @@ export const StudentDashboard = () => {
         </AnimatePresence>
       )}
 
-      {/* --- ENHANCED CERTIFICATE MODAL --- */}
+      {/* --- ENHANCED CERTIFICATE MODAL (UNCHANGED) --- */}
       {certificateModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
             <div id="certificate-print-area" className="relative bg-white text-slate-900 w-[950px] max-w-full p-0 shadow-2xl flex flex-col items-center text-center overflow-hidden">
