@@ -115,7 +115,7 @@ export const TeacherDashboard = () => {
           }));
         }
 
-        const coursesRes = await fetch('http://localhost:5000/api/courses', {
+        const coursesRes = await fetch('http://localhost:5000/api/courses/my-courses', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(coursesRes.ok) {

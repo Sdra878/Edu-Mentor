@@ -47,7 +47,11 @@ export const StudentDashboard = () => {
   // --- NEW: WORKSHOPS STATES ---
   const [workshops, setWorkshops] = useState([]);
   const [registeredWorkshops, setRegisteredWorkshops] = useState([]);
-  
+    // --- MESSAGING STATES (جديد) ---
+  const [teachersList, setTeachersList] = useState([]); // قائمة المدرسين
+  const [selectedTeacher, setSelectedTeacher] = useState(null); // المدرس المحدد حالياً
+  const [chatMessages, setChatMessages] = useState([]); // رسائل المحادثة
+  const [messageText, setMessageText] = useState(''); // نص الرسالة المكتوبة
   // --- NEW: COURSE PLAYER STATE ---
   const [selectedCourse, setSelectedCourse] = useState(null); // To track YouTube-style view
   
@@ -70,6 +74,7 @@ export const StudentDashboard = () => {
   
   const [trainingData, setTrainingData] = useState({ company: '', cv: '' });
   const [testScore, setTestScore] = useState(null);
+  
 
   // === 1. جلب البيانات ===
   useEffect(() => {
@@ -184,7 +189,6 @@ export const StudentDashboard = () => {
     }
   };
 
-  // === 3. البحث عن كورس ===
   const handleSearch = async () => {
     if (!searchTerm) return;
     try {
@@ -192,23 +196,37 @@ export const StudentDashboard = () => {
       const res = await fetch(`http://localhost:5000/api/courses?title=${searchTerm}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      if (!res.ok) {
+          throw new Error("Failed to fetch courses");
+      }
+
       const data = await res.json();
       
-      const enrolledIds = activeEnrollments.map(e => e.course._id);
-      const completedIds = enrollments.map(c => c.course._id);
+      // --- تعديل هام: فلترة آمنة لتجنب الأخطاء ---
+      // نتأكد أن الكورس والـ ID موجودين قبل محاولة جلبهم
+      const enrolledIds = activeEnrollments
+        .filter(e => e && e.course && e.course._id)
+        .map(e => e.course._id);
+        
+      const completedIds = enrollments
+        .filter(c => c && c.course && c.course._id)
+        .map(c => c.course._id);
       
       let available = data.filter(c => 
-        !enrolledIds.includes(c._id) && !completedIds.includes(c._id)
+        c._id && // تأكد أن الكورس لديه ID
+        !enrolledIds.includes(c._id) && 
+        !completedIds.includes(c._id)
       );
 
       available = available.filter(c => 
-        c.title.toLowerCase().includes(searchTerm.toLowerCase())
+        c.title && c.title.toLowerCase().includes(searchTerm.toLowerCase())
       );
       
       setSearchResults(available);
     } catch (error) {
-      console.error(error);
-      alert("Error searching courses");
+      console.error("Search Error:", error);
+      alert("Error searching courses"); // رسالة واضحة للمستخدم
     }
   };
 
