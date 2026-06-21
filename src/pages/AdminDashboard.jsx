@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
 import { 
   Users, UserPlus, Building2, FileText, 
-  Shield, Layers, Save, X, AlertOctagon, Moon, Sun, Briefcase, Search, Trash2, CheckCircle
+  Shield, Layers, Save, X, AlertOctagon, Moon, Sun, Briefcase, Search, Trash2, CheckCircle, LogOut, Power
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
@@ -24,18 +24,43 @@ export const AdminDashboard = () => {
   const [teachers, setTeachers] = useState([]); 
   const [companies, setCompanies] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-  const [content, setContent] = useState([]); // الكورسات المعلقة
-  const [internships, setInternships] = useState([]); // الوظائف المعلقة
+  const [content, setContent] = useState([]);
+  const [internships, setInternships] = useState([]);
   
-  // States للبحث والمحتوى المقبول
   const [searchQuery, setSearchQuery] = useState('');
   const [approvedCourses, setApprovedCourses] = useState([]);
   const [approvedInternships, setApprovedInternships] = useState([]);
   const [contentView, setContentView] = useState('pending');
 
-  const [certifications, setCertifications] = useState([]); 
   const [settings, setSettings] = useState({ maintenanceMode: false });
   const [refresh, setRefresh] = useState(0);
+  const [shuttingDown, setShuttingDown] = useState(false);
+
+  // === دالة Logout ===
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  };
+
+  // === دالة System Shutdown ===
+  const handleSystemShutdown = async () => {
+    if (!window.confirm('Are you sure you want to shutdown the system? This will make the entire platform unavailable.')) return;
+    setShuttingDown(true);
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const response = await axios.post('http://localhost:5000/api/admin/system/shutdown', {}, config);
+      if (response.status === 200) {
+        setSettings(prev => ({ ...prev, maintenanceMode: true }));
+        alert('System has been shut down successfully.');
+      }
+    } catch (err) {
+      console.error('Shutdown error:', err);
+      alert('Failed to shutdown the system.');
+    } finally {
+      setShuttingDown(false);
+    }
+  };
 
   // === دالة جلب البيانات ===
   useEffect(() => {
@@ -45,52 +70,44 @@ export const AdminDashboard = () => {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       try {
-        // 1. جلب المعلمين المعلقين
         const tRes = await axios.get('http://localhost:5000/api/admin/pending/teacher', config);
         
-        // 2. جلب المستخدمين
         let uData = [];
         try {
             const uRes = await axios.get('http://localhost:5000/api/admin/users', config);
             uData = uRes.data;
         } catch (e) { console.log("Users API missing or failed"); }
 
-        // 3. جلب الشركات المعلقة
         let cData = [];
         try {
             const cRes = await axios.get('http://localhost:5000/api/admin/pending/companies', config);
             cData = cRes.data;
         } catch (e) { console.log("Companies API missing or failed"); }
 
-        // 4. جلب الكورسات المعلقة
         let cntData = [];
         try {
             const cntRes = await axios.get('http://localhost:5000/api/admin/pending/courses', config);
             cntData = cntRes.data;
         } catch (e) { console.log("Courses API missing or failed"); }
 
-        // 5. جلب الوظائف المعلقة
         let iData = [];
         try {
             const iRes = await axios.get('http://localhost:5000/api/admin/pending/internships', config);
             iData = iRes.data;
         } catch (e) { console.log("Internships API missing or failed"); }
 
-        // --- جلب الكورسات المقبولة (Approved Courses) ---
         let acData = [];
         try {
             const acRes = await axios.get('http://localhost:5000/api/admin/approved/courses', config);
             acData = acRes.data;
         } catch (e) { console.log("Approved Courses API missing"); }
 
-        // --- جلب الوظائف المقبولة (Approved Internships) ---
         let aiData = [];
         try {
             const aiRes = await axios.get('http://localhost:5000/api/admin/approved/internships', config);
             aiData = aiRes.data;
         } catch (e) { console.log("Approved Internships API missing"); }
 
-        // تعيين البيانات
         setTeachers(tRes.data);
         setAllUsers(uData);
         setCompanies(cData);
@@ -99,10 +116,8 @@ export const AdminDashboard = () => {
         setApprovedCourses(acData);
         setApprovedInternships(aiData);
         
-        setCertifications([]);
         setSettings({ maintenanceMode: false });
 
-        // حساب الإحصائيات
         setStats({
           totalStudents: uData.filter(u => u.user_type === 'student').length,
           activeTeachers: uData.filter(u => u.user_type === 'teacher' && u.is_active).length,
@@ -120,7 +135,6 @@ export const AdminDashboard = () => {
     loadData();
   }, [refresh]);
 
-  // === دالة حذف المستخدم ===
   const handleDeleteUser = async (id) => {
     if(!window.confirm("Are you sure you want to delete this user?")) return;
     try {
@@ -129,14 +143,13 @@ export const AdminDashboard = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("User deleted successfully!");
-      setRefresh(prev => prev + 1); // تحديث القائمة
+      setRefresh(prev => prev + 1);
     } catch (err) {
       console.error(err);
       alert("Failed to delete user.");
     }
   };
 
-  // === دوال الموافقة/الرفض ===
   const handleTeacherAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
@@ -181,7 +194,6 @@ export const AdminDashboard = () => {
     </button>
   );
 
-  // فلترة المستخدمين للبحث
   const filteredUsers = allUsers.filter(u => 
     u.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -194,13 +206,16 @@ export const AdminDashboard = () => {
           <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.appName} <span className="text-primary-600">Admin</span></h1>
           <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">System Control Panel</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 ${settings.maintenanceMode ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
             <div className={`w-2 h-2 rounded-full ${settings.maintenanceMode ? 'bg-white' : 'bg-white'}`}></div>
             {settings.maintenanceMode ? 'Maintenance Mode' : 'System Live'}
           </div>
           <button onClick={() => setDarkMode(!darkMode)} className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button onClick={handleLogout} className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-red-400 hover:bg-red-900/30' : 'bg-gray-200 text-red-500 hover:bg-red-50'}`} title="Logout">
+            <LogOut size={20} />
           </button>
         </div>
       </header>
@@ -210,7 +225,6 @@ export const AdminDashboard = () => {
         <TabButton id="users" label="Manage Users" icon={Users} />
         <TabButton id="requests" label="Requests" icon={UserPlus} />
         <TabButton id="content" label="Content Review" icon={FileText} />
-        <TabButton id="certifications" label="Certifications" icon={Layers} />
         <TabButton id="settings" label="System" icon={Shield} />
       </div>
 
@@ -250,20 +264,16 @@ export const AdminDashboard = () => {
               </div>
             )}
 
-            {/* --- 2. REQUESTS (Logic Fixed: No Duplicate Emails) --- */}
+            {/* --- 2. REQUESTS --- */}
             {activeTab === 'requests' && (
               <div className="space-y-6">
-                {/* Pending Teachers */}
                 <div>
                   <h3 className={`font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-slate-200' : 'text-gray-700'}`}><UserPlus size={18}/> Pending Teachers</h3>
                   <div className="grid gap-4">
                     {teachers.length === 0 ? <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>No pending requests</p> : teachers.map(t => (
                       <div key={t._id} className={`p-4 rounded-lg border flex justify-between items-center shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
                         <div>
-                          {/* التعديل: عرض الاسم أو الايميل */}
                           <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t.name ? t.name : t.email}</p>
-                          
-                          {/* التعديل: عرض الايميل في السطر الثاني فقط إذا كان الاسم موجوداً لتجنب التكرار */}
                           {t.name ? (
                             <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{t.email}</p>
                           ) : (
@@ -279,17 +289,13 @@ export const AdminDashboard = () => {
                   </div>
                 </div>
                 
-                {/* Pending Companies */}
                 <div>
                   <h3 className={`font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-slate-200' : 'text-gray-700'}`}><Building2 size={18}/> Pending Companies</h3>
                   <div className="grid gap-4">
                     {companies.length === 0 ? <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>No pending requests</p> : companies.map(c => (
                       <div key={c._id} className={`p-4 rounded-lg border flex justify-between items-center shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
                         <div>
-                          {/* التعديل: عرض اسم الشركة أو الايميل */}
                           <p className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{c.name ? c.name : c.email}</p>
-                          
-                          {/* التعديل: نفس منطق المعلمين، لا تكرر الايميل */}
                           {c.name ? (
                             <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{c.email}</p>
                           ) : (
@@ -307,12 +313,11 @@ export const AdminDashboard = () => {
               </div>
             )}
 
-            {/* --- 3. USERS (Search & Delete) --- */}
+            {/* --- 3. USERS --- */}
             {activeTab === 'users' && (
                <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <div className="p-4 border-b flex flex-col md:flex-row justify-between items-center gap-4">
                     <h3 className="font-bold">All Users</h3>
-                    {/* Search Input */}
                     <div className="relative w-full md:w-auto">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                         <input 
@@ -361,10 +366,9 @@ export const AdminDashboard = () => {
                </div>
             )}
 
-            {/* --- CONTENT TAB (Pending & Approved) --- */}
+            {/* --- CONTENT TAB --- */}
             {activeTab === 'content' && (
                <div className="space-y-8">
-                 {/* Toggle Buttons */}
                  <div className="flex justify-center mb-6">
                      <div className={`p-1 rounded-lg inline-flex ${darkMode ? 'bg-slate-800' : 'bg-gray-200'}`}>
                         <button 
@@ -382,7 +386,6 @@ export const AdminDashboard = () => {
                      </div>
                  </div>
 
-                 {/* قسم الكورسات */}
                  <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="p-4 border-b flex justify-between items-center">
                         <h3 className="font-bold flex items-center gap-2">
@@ -419,7 +422,6 @@ export const AdminDashboard = () => {
                     </div>
                  </div>
 
-                 {/* قسم الوظائف */}
                  <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="p-4 border-b flex justify-between items-center">
                         <h3 className="font-bold flex items-center gap-2"><Briefcase size={18} className="text-blue-500"/> 
@@ -469,11 +471,37 @@ export const AdminDashboard = () => {
                </div>
             )}
 
-            {/* --- OTHER TABS --- */}
-            {['certifications', 'settings'].includes(activeTab) && (
-               <div className={`p-10 text-center bg-white dark:bg-slate-800 rounded-xl border ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
-                 <p className="mb-2">This module is not implemented in the backend yet.</p>
-                 <p className="text-sm text-gray-500">Backend controller is missing for this feature.</p>
+            {/* --- SETTINGS / SYSTEM TAB --- */}
+            {activeTab === 'settings' && (
+               <div className={`p-8 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                 <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
+                   <Shield size={22} className="text-primary-600" /> System Controls
+                 </h3>
+                 <div className={`p-6 rounded-xl border-2 border-dashed ${settings.maintenanceMode ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-900'}`}>
+                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                     <div className="flex items-center gap-4">
+                       <div className={`p-3 rounded-lg ${settings.maintenanceMode ? 'bg-red-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                         <Power size={24} />
+                       </div>
+                       <div>
+                         <h4 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-gray-800'}`}>System Shutdown</h4>
+                         <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Shut down the entire platform. All users will be logged out and the system will enter maintenance mode.</p>
+                       </div>
+                     </div>
+                     <button
+                       onClick={handleSystemShutdown}
+                       disabled={shuttingDown || settings.maintenanceMode}
+                       className={`px-6 py-3 rounded-lg font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+                         settings.maintenanceMode
+                           ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-500 cursor-not-allowed'
+                           : 'bg-red-600 hover:bg-red-700 text-white'
+                       }`}
+                     >
+                       <Power size={16} />
+                       {shuttingDown ? 'Shutting Down...' : settings.maintenanceMode ? 'System is Down' : 'Shutdown System'}
+                     </button>
+                   </div>
+                 </div>
                </div>
             )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { useLanguage } from '../context/LanguageContext';
@@ -21,14 +21,13 @@ export const TeacherDashboard = () => {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // Tabs State - تعديل 1: التبويب الافتراضي البروفايل
+  // Tabs State
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
 
   // --- Data States ---
   const [courses, setCourses] = useState([]);
   const [students, setStudents] = useState([]); 
-  const [messages, setMessages] = useState([]); 
   
   // --- EXAMS STATES ---
   const [exams, setExams] = useState([]);
@@ -44,7 +43,7 @@ export const TeacherDashboard = () => {
   // --- WORKSHOPS STATES ---
   const [workshops, setWorkshops] = useState([]);
   const [showWorkshopModal, setShowWorkshopModal] = useState(false);
-  const [selectedWorkshop, setSelectedWorkshop] = useState(null); // تعديل 6: لفتح تفاصيل الوركشوب
+  const [selectedWorkshop, setSelectedWorkshop] = useState(null);
   const [workshopData, setWorkshopData] = useState({ title: '', description: '', date: '', meeting_link: '' });
   
   // --- Profile States ---
@@ -61,7 +60,7 @@ export const TeacherDashboard = () => {
     country: '', 
     gradYear: '', 
     dob: '', 
-    bio: '' // تعديل 2: إضافة حقل البايو
+    bio: ''
   });
 
   const [interests, setInterests] = useState([]); 
@@ -73,10 +72,12 @@ export const TeacherDashboard = () => {
   const [courseData, setCourseData] = useState({ title: '', description: '', category: '', level: '', price: '', duration_hours: '' });
   const [assignData, setAssignData] = useState({ title: '', dueDate: '' });
   
-  // تعديل 8: حالات الرسائل (تحديد طالب وبحث)
-  const [msgData, setMsgData] = useState({ text: '', receiverId: 'all' });
+  // ✅ رسائل: حالات المراسلة المزبطّة
+  const [chatMessages, setChatMessages] = useState([]);
+  const [msgData, setMsgData] = useState({ text: '', receiverId: '' });
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchStudent, setSearchStudent] = useState('');
+  const chatEndRef = useRef(null);
 
   // تعديل 5: حالة إضافة ملاحظة للكورس
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -84,6 +85,13 @@ export const TeacherDashboard = () => {
   const [noteText, setNoteText] = useState('');
 
   const [refresh, setRefresh] = useState(0);
+
+  // ✅ رسائل: تلقائي اسكرول لآخر رسالة
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
 
   // === 1. جلب البيانات من الباك إند ===
   useEffect(() => {
@@ -109,9 +117,9 @@ export const TeacherDashboard = () => {
             years_experince: pData.years_experince || '',
             linkedin_url: pData.linkedin_url || '',
             cv_url: pData.cv_url || '',
-            university: pData.university || prev.university, // تعديل 2
-            country: pData.country || prev.country, // تعديل 2
-            bio: pData.bio || prev.bio // تعديل 2
+            university: pData.university || prev.university,
+            country: pData.country || prev.country,
+            bio: pData.bio || prev.bio
           }));
         }
 
@@ -131,14 +139,6 @@ export const TeacherDashboard = () => {
           setStudents(studentsData);
         }
 
-        const msgRes = await fetch('http://localhost:5000/api/messages', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if(msgRes.ok) {
-          const msgsData = await msgRes.json();
-          setMessages(msgsData);
-        }
-
         const wsRes = await fetch('http://localhost:5000/api/workshops', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -155,6 +155,72 @@ export const TeacherDashboard = () => {
     };
     loadData();
   }, [refresh, user?.id]);
+
+  // ✅ رسائل: جلب محادثة مع طالب معيّن
+  const loadConversation = async (otherUserId) => {
+    if (!otherUserId) {
+      setChatMessages([]);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/conversation/${otherUserId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        setChatMessages(msgs);
+      } else {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      setChatMessages([]);
+    }
+  };
+
+  // ✅ رسائل: إرسال رسالة - endpoint و field names صح
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!msgData.receiverId) {
+      return alert("Please select a student first");
+    }
+    if (!msgData.text.trim()) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('http://localhost:5000/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          receiver: msgData.receiverId,
+          message: msgData.text
+        })
+      });
+
+      if (res.ok) {
+        const newMsg = await res.json();
+        setChatMessages(prev => [...prev, newMsg]);
+        setMsgData(prev => ({ ...prev, text: '' }));
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to send message");
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Server Error");
+    }
+  };
+
+  // ✅ رسائل: عند اختيار طالب → حمّل المحادثة
+  const handleSelectStudent = (student) => {
+    setSelectedStudent(student);
+    setMsgData(prev => ({ ...prev, receiverId: student._id }));
+    loadConversation(student._id);
+  };
 
   // === Handlers ===
 
@@ -324,9 +390,9 @@ export const TeacherDashboard = () => {
           years_experince: profileData.years_experince, 
           linkedin_url: profileData.linkedin_url,
           cv_url: profileData.cv_url,
-          university: profileData.university, // تعديل 2
-          country: profileData.country, // تعديل 2
-          bio: profileData.bio // تعديل 2
+          university: profileData.university,
+          country: profileData.country,
+          bio: profileData.bio
         })
       });
 
@@ -392,41 +458,12 @@ export const TeacherDashboard = () => {
     }
   };
 
-  // تعديل 5: حفظ الملاحظة
   const handleSaveNote = () => {
     if(!noteText.trim()) return alert("Please write a note first");
     alert(`Note saved for course: ${noteCourse.title}\nNote: ${noteText}`);
     setShowNoteModal(false);
     setNoteText('');
     setNoteCourse(null);
-  };
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch('http://localhost:5000/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          receiverId: msgData.receiverId, 
-          text: msgData.text
-        })
-      });
-
-      if (res.ok) {
-        const newMsg = await res.json();
-        setMessages([...messages, newMsg]);
-        setMsgData({ ...msgData, text: '' });
-      } else {
-        alert("Failed to send message");
-      }
-    } catch (error) {
-      console.error(error);
-    }
   };
 
   const handleAddAssignment = async (e) => {
@@ -443,6 +480,19 @@ export const TeacherDashboard = () => {
     }
   };
 
+  // ✅ رسائل: دالة مساعدة لتحقق إذا الرسالة مني
+  const isMyMessage = (msg) => {
+    const senderId = msg.sender?._id || msg.sender;
+    const myId = user?.id || user?._id;
+    return senderId?.toString() === myId?.toString();
+  };
+
+  // ✅ رسائل: دالة لاستخراج اسم المرسل
+  const getSenderName = (msg) => {
+    if (isMyMessage(msg)) return "You";
+    return selectedStudent?.name || selectedStudent?.full_name || msg.receiver?.email?.split('@')[0] || "Student";
+  };
+
   const TabButton = ({ id, label, icon: Icon }) => (
     <button onClick={() => setActiveTab(id)} className={`flex items-center gap-2 px-5 py-3 font-medium transition-all border-b-2 whitespace-nowrap ${activeTab === id ? 'border-primary-600 text-primary-600 bg-primary-50 dark:bg-slate-800 dark:text-primary-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
       <Icon size={18} /> {label}
@@ -451,7 +501,6 @@ export const TeacherDashboard = () => {
 
   return (
     <div className={`p-6 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
-      {/* تعديل 4: تغيير الترحيب */}
       <header className="flex justify-between items-center mb-8">
         <div>
           <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>Welcome, {profileData.full_name || user?.name || 'Teacher'}</h1>
@@ -467,7 +516,6 @@ export const TeacherDashboard = () => {
         <TabButton id="overview" label="Overview" icon={TrendingUp} />
         <TabButton id="courses" label="My Courses" icon={BookOpen} />
         <TabButton id="workshops" label="Workshops" icon={CalendarIcon} />
-        {/* تعديل 7: Exom بدل Exams & Quizzes */}
         <TabButton id="exams" label="Exam" icon={ClipboardList} />
         <TabButton id="classwork" label="Classwork" icon={Users} />
         <TabButton id="communication" label="Messages" icon={MessageSquare} />
@@ -477,7 +525,7 @@ export const TeacherDashboard = () => {
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             
-            {/* 1. OVERVIEW - تعديل 3: ألوان هادية */}
+            {/* 1. OVERVIEW */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -485,7 +533,7 @@ export const TeacherDashboard = () => {
                     { title: "Total Courses", val: courses.length, color: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-slate-800 dark:text-blue-400 dark:border-slate-700", icon: BookOpen },
                     { title: "Enrolled Students", val: students.length, color: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:border-slate-700", icon: Users },
                     { title: "Total Workshops", val: workshops.length, color: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-slate-800 dark:text-amber-400 dark:border-slate-700", icon: CalendarIcon },
-                    { title: "Unread Messages", val: messages.length, color: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-slate-800 dark:text-purple-400 dark:border-slate-700", icon: MessageSquare }
+                    { title: "Students Contacted", val: chatMessages.length, color: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-slate-800 dark:text-purple-400 dark:border-slate-700", icon: MessageSquare }
                   ].map((item, i) => (
                     <motion.div key={i} whileHover={{ y: -5 }} className={`p-6 rounded-xl shadow-sm border ${item.color} flex items-center justify-between relative overflow-hidden group`}>
                       <div className="relative z-10">
@@ -500,7 +548,7 @@ export const TeacherDashboard = () => {
               </div>
             )}
 
-            {/* 2. MANAGE COURSES - تعديل 5: إصلاح الأيقونات والملاحظات */}
+            {/* 2. MANAGE COURSES */}
             {activeTab === 'courses' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -530,7 +578,6 @@ export const TeacherDashboard = () => {
                   </motion.div>
                 )}
 
-                {/* تعديل 5: نافذة إضافة ملاحظة */}
                 {showNoteModal && noteCourse && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className={`w-full max-w-md rounded-2xl shadow-2xl p-6 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
@@ -550,7 +597,6 @@ export const TeacherDashboard = () => {
                       <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>{c.description}</p>
                       <div className="flex justify-between items-center mt-4">
                         <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</span>
-                        {/* تعديل 5: إصلاح الـ hover وحفظ الملاحظة */}
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setNoteCourse(c); setNoteText(''); setShowNoteModal(true); }} className="text-blue-500 hover:bg-blue-100 dark:hover:bg-slate-700 p-2 rounded"><FileText size={16}/></button>
                           <button onClick={()=>handleDeleteCourse(c._id || c.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 p-2 rounded"><Trash2 size={16}/></button>
@@ -562,7 +608,7 @@ export const TeacherDashboard = () => {
               </div>
             )}
 
-            {/* 3. WORKSHOPS SECTION - تعديل 6: الدخول للتفاصيل */}
+            {/* 3. WORKSHOPS SECTION */}
             {activeTab === 'workshops' && (
                <div className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -588,7 +634,6 @@ export const TeacherDashboard = () => {
                   </motion.div>
                 )}
 
-                {/* تعديل 6: نافذة تفاصيل الوركشوب */}
                 {selectedWorkshop && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className={`w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
@@ -632,7 +677,6 @@ export const TeacherDashboard = () => {
                       <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {new Date(ws.date).toLocaleDateString()}</div>
                       <h3 className="font-bold text-lg mb-1">{ws.title}</h3>
                       <p className="text-sm text-gray-500 mb-4 line-clamp-2">{ws.description}</p>
-                      
                       <div className="border-t pt-3 dark:border-slate-700 mt-2">
                          <div className="flex justify-between items-center text-xs text-gray-400">
                             <span className="flex items-center gap-1"><Globe size={12}/> {ws.meeting_link ? 'Online' : 'Link N/A'}</span>
@@ -764,11 +808,11 @@ export const TeacherDashboard = () => {
                </div>
             )}
 
-            {/* 6. COMMUNICATION - تعديل 8: اختيار طالب وبحث */}
+            {/* ✅ 6. COMMUNICATION / MESSAGES - مزبطّت بالكامل */}
             {activeTab === 'communication' && (
               <div className={`rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 
-                {/* Sidebar - Students */}
+                {/* Sidebar - Students List */}
                 <div className={`w-1/3 border-r flex flex-col ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
                   <div className="p-4 border-b dark:border-slate-700">
                     <h3 className="font-bold mb-3">Students</h3>
@@ -784,150 +828,108 @@ export const TeacherDashboard = () => {
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    <div 
-                      onClick={() => { setSelectedStudent(null); setMsgData({...msgData, receiverId: 'all'}); }} 
-                      className={`p-3 cursor-pointer border-b dark:border-slate-700 ${!selectedStudent ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
-                    >
-                      <p className="font-semibold text-sm">All Students</p>
-                    </div>
                     {students
                       .filter(s => (s.name || s.full_name || '').toLowerCase().includes(searchStudent.toLowerCase()))
                       .map(s => (
                         <div 
                           key={s._id} 
-                          onClick={() => { setSelectedStudent(s); setMsgData({...msgData, receiverId: s._id}); }} 
-                          className={`p-3 cursor-pointer border-b dark:border-slate-700 flex items-center gap-2 ${selectedStudent?._id === s._id ? 'bg-blue-50 dark:bg-slate-700' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
+                          onClick={() => handleSelectStudent(s)} 
+                          className={`p-3 cursor-pointer border-b dark:border-slate-700 flex items-center gap-3 transition-colors ${selectedStudent?._id === s._id ? 'bg-blue-50 dark:bg-slate-700 border-l-4 border-l-blue-500' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
                         >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400"><User size={16}/></div>
-                          <p className="font-medium text-sm">{s.name || s.full_name || 'Student'}</p>
+                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
+                            <User size={18}/>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">{s.name || s.full_name || 'Student'}</p>
+                            <p className="text-xs text-gray-400 truncate">{s.email || ''}</p>
+                          </div>
                         </div>
                       ))
                     }
+                    {students.filter(s => (s.name || s.full_name || '').toLowerCase().includes(searchStudent.toLowerCase())).length === 0 && (
+                      <div className="p-6 text-center text-gray-400 text-sm">No students found</div>
+                    )}
                   </div>
                 </div>
 
                 {/* Chat Area */}
                 <div className="w-2/3 flex flex-col">
-                  <div className="border-b p-4 dark:border-slate-700">
-                    <h3 className="font-bold">{selectedStudent ? `Chat with ${selectedStudent.name || selectedStudent.full_name}` : 'General Chat'}</h3>
+                  {/* Chat Header */}
+                  <div className={`border-b p-4 dark:border-slate-700 ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
+                    {selectedStudent ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                          <User size={18}/>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm">{selectedStudent.name || selectedStudent.full_name || 'Student'}</h3>
+                          <p className="text-xs text-green-500 flex items-center gap-1"><CheckCircle size={10}/> Online</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <h3 className="font-bold text-gray-400">Select a student to start chatting</h3>
+                    )}
                   </div>
-                  <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                    {messages.length === 0 ? <p className="text-center text-gray-400 mt-10">No messages yet.</p> :
-                        messages.map(m => (
-                            <div key={m._id || m.id} className={`flex flex-col ${m.senderId === user.id ? 'items-end' : 'items-start'}`}>
-                                 <div className={`max-w-[70%] p-3 rounded-2xl text-sm ${m.senderId === user.id ? 'bg-primary-600 text-white rounded-br-none' : 'bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-white rounded-bl-none'}`}>
-                                    <p>{m.text || m.message}</p>
-                                 </div>
+
+                  {/* Messages Area */}
+                  <div id="chat-messages" className="flex-1 p-4 overflow-y-auto space-y-3">
+                    {!selectedStudent ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <MessageSquare size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                          <p className="text-gray-400">Choose a student from the list to start a conversation</p>
+                        </div>
+                      </div>
+                    ) : chatMessages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <Send size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                          <p className="text-gray-400">No messages yet. Say hello!</p>
+                        </div>
+                      </div>
+                    ) : (
+                      chatMessages.map(m => {
+                        const mine = isMyMessage(m);
+                        return (
+                          <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[75%] ${mine ? 'order-1' : 'order-1'}`}>
+                              <p className={`text-[10px] mb-1 px-1 ${mine ? 'text-right text-gray-400' : 'text-left text-gray-400'}`}>
+                                {getSenderName(m)} · {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                                mine 
+                                  ? 'bg-blue-600 text-white rounded-br-md' 
+                                  : `${darkMode ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-bl-md`
+                              }`}>
+                                <p>{m.message}</p>
+                              </div>
                             </div>
-                        ))
-                    }
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={chatEndRef} />
                   </div>
+
+                  {/* Message Input */}
                   <form onSubmit={handleSendMessage} className="p-4 border-t dark:border-slate-700 flex gap-2">
-                    <input required placeholder="Type a message..." className={`flex-1 px-4 py-2 border rounded-lg ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300'}`} value={msgData.text} onChange={e=>setMsgData({...msgData, text:e.target.value})} />
-                    <Button type="submit"><Send size={18}/></Button>
+                    <input 
+                      required 
+                      disabled={!selectedStudent}
+                      placeholder={selectedStudent ? "Type a message..." : "Select a student first"} 
+                      className={`flex-1 px-4 py-2.5 border rounded-xl text-sm outline-none transition-colors ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-300 placeholder-gray-400'} ${!selectedStudent ? 'opacity-50 cursor-not-allowed' : 'focus:border-blue-500'}`}
+                      value={msgData.text} 
+                      onChange={e => setMsgData(prev => ({ ...prev, text: e.target.value }))} 
+                    />
+                    <Button 
+                      type="submit" 
+                      disabled={!selectedStudent || !msgData.text.trim()}
+                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${!selectedStudent || !msgData.text.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                    >
+                      <Send size={18}/>
+                    </Button>
                   </form>
                 </div>
-              </div>
-            )}
-
-            {/* --- 7. MY PROFILE SECTION --- تعديل 2: إضافة داتا إضافية */}
-            {activeTab === 'profile' && (
-               <div className="w-full relative">
-                {!isEditingProfile && (
-                  <div className="w-full">
-                    <div className="h-32 md:h-60 w-full bg-gradient-to-r from-black-600 via-primary-600 to-blue-600 relative">
-                        <div className="absolute top-6 right-6">
-                            <button onClick={() => setIsEditingProfile(true)} className="bg-white text-blue-600 hover:bg-gray-50 shadow-lg border border-gray-100 px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Edit3 size={16} /> Edit Profile</button>
-                        </div>
-                        <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none"><div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white blur-3xl"></div><div className="absolute top-20 right-20 w-64 h-64 rounded-full bg-blue-300 blur-3xl"></div></div>
-                    </div>
-                    <div className="max-w-7xl mx-auto px-6 relative -mt-20 md:-mt-24 z-10 pb-12">
-                        <div className="flex flex-col md:flex-row items-end md:items-end gap-6 mb-8">
-                            <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-8 border-white dark:border-slate-900 bg-gray-200 dark:bg-slate-800 shadow-2xl flex items-center justify-center overflow-hidden flex-shrink-0"><User size={80} className="text-gray-400 dark:text-slate-600"/></div>
-                            <div className="flex-1 mb-2 text-center md:text-left">
-                                <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{profileData.full_name || user?.name}</h2>
-                                <p className="text-xl text-primary-600 dark:text-primary-400 font-medium mt-1">{profileData.specialization}</p>
-                                <div className="flex flex-col md:flex-row items-center gap-4 mt-3 text-gray-600 dark:text-slate-400 text-sm">
-                                    {profileData.university && <span className="flex items-center gap-1"><GraduationCap size={16} className="text-primary-500"/> {profileData.university}</span>}
-                                    {profileData.country && <span className="flex items-center gap-1"><MapPin size={16} className="text-primary-500"/> {profileData.country}</span>}
-                                    <span className="flex items-center gap-1"><Calendar size={16} className="text-primary-500"/> {profileData.years_experince} Years Experience</span>
-                                </div>
-                            </div>
-                            <div className="hidden md:flex gap-4 mb-4">
-                                <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]"><p className="text-2xl font-bold text-slate-800 dark:text-white">{courses.length}</p><p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Courses</p></div>
-                                <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]"><p className="text-2xl font-bold text-slate-800 dark:text-white">{students.length}</p><p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Students</p></div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 space-y-8">
-                                {profileData.bio && (
-                                  <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                                      <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>Bio</h3>
-                                      <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.bio}</p>
-                                  </section>
-                                )}
-                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>Qualifications</h3>
-                                    <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.qualifications}</p>
-                                </section>
-                            </div>
-                            <div className="space-y-8">
-                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6">Contact Information</h3>
-                                    <div className="space-y-6">
-                                        <div className="flex items-start gap-4"><div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"><Mail size={20}/></div><div><p className="text-xs text-gray-500 font-bold uppercase">Email</p><p className="text-slate-700 dark:text-slate-300 font-medium">{user?.email}</p></div></div>
-                                        <div className="flex items-start gap-4"><div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"><Phone size={20}/></div><div><p className="text-xs text-gray-500 font-bold uppercase">Phone</p><p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.phone}</p></div></div>
-                                        <div className="flex items-start gap-4"><div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400"><Globe size={20}/></div><div><p className="text-xs text-gray-500 font-bold uppercase">LinkedIn</p><p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.linkedin_url || 'Not provided'}</p></div></div>
-                                    </div>
-                                </section>
-                            </div>
-                        </div>
-                    </div>
-                  </div>
-                )}
-
-                {isEditingProfile && (
-                  <div className="max-w-6xl mx-auto px-6 py-8">
-                    <div className={`rounded-3xl shadow-2xl overflow-hidden border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <div className="p-8 md:p-10">
-                            <div className="flex items-center justify-between mb-10 border-b border-gray-100 dark:border-slate-700 pb-6">
-                                <div><h2 className="text-2xl font-bold text-slate-800 dark:text-white">Edit Profile</h2><p className="text-sm text-gray-500 mt-1">Update your personal information and preferences.</p></div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => setIsEditingProfile(false)} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 flex items-center gap-2 transition-colors"><X size={18} /> Cancel</button>
-                                    <button onClick={handleSaveProfile} className="px-5 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl flex items-center gap-2 shadow-lg shadow-primary-500/30 transition-colors"><Save size={18} /> Save Changes</button>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                                <div className="space-y-8">
-                                    <div className="text-center"><div className="w-32 h-32 mx-auto rounded-full bg-gray-100 dark:bg-slate-700 border-4 border-white dark:border-slate-800 shadow-md flex items-center justify-center mb-4"><User size={50} className="text-gray-400"/></div><button className="text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center justify-center gap-1"><Camera size={16}/> Change Photo</button></div>
-                                </div>
-                                <div className="lg:col-span-2 space-y-8">
-                                    <div>
-                                        <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Personal Information</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label><input value={profileData.full_name} onChange={(e) => setProfileData({...profileData, full_name: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label><input value={profileData.phone} onChange={(e) => setProfileData({...profileData, phone: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn URL</label><input value={profileData.linkedin_url} onChange={(e) => setProfileData({...profileData, linkedin_url: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            {/* تعديل 2: إضافة حقول البايو والجامعة والبلد */}
-                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">University</label><input value={profileData.university} onChange={(e) => setProfileData({...profileData, university: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country</label><input value={profileData.country} onChange={(e) => setProfileData({...profileData, country: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bio</label><textarea rows="4" value={profileData.bio} onChange={(e) => setProfileData({...profileData, bio: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}></textarea></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Professional Details</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Specialization</label><input value={profileData.specialization} onChange={(e) => setProfileData({...profileData, specialization: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Years of Experience</label><input type="number" value={profileData.years_experince} onChange={(e) => setProfileData({...profileData, years_experince: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} /></div>
-                                        </div>
-                                        <div className="mt-4"><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Qualifications</label><textarea rows="4" value={profileData.qualifications} onChange={(e) => setProfileData({...profileData, qualifications: e.target.value})} className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}></textarea></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

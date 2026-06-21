@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
@@ -6,7 +6,7 @@ import {
   BookOpen, User, Briefcase, Award, Play, CheckCircle, 
   Upload, Brain, Moon, Sun, Camera, MapPin, 
   GraduationCap, Mail, Calendar, Phone, Globe, FileText, 
-  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon, ArrowLeft
+  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon, ArrowLeft, MessageSquare, Send
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -17,16 +17,13 @@ export const StudentDashboard = () => {
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   
-  // States للبحث والتسجيل
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [activeEnrollments, setActiveEnrollments] = useState([]); 
   
-  // --- State: الوظائف والملف ---
   const [approvedInternships, setApprovedInternships] = useState([]);
   const [cvFile, setCvFile] = useState(null); 
   
-  // --- EXAMS STATES ---
   const [exams, setExams] = useState([
       { 
           id: 1, 
@@ -39,28 +36,26 @@ export const StudentDashboard = () => {
   ]); 
   const [currentExam, setCurrentExam] = useState(null); 
   const [examAnswers, setExamAnswers] = useState({});
-  const [examResult, setExamResult] = useState(null); // NEW: To show immediate result
+  const [examResult, setExamResult] = useState(null);
   
-  // --- CERTIFICATE STATE ---
   const [certificateModal, setCertificateModal] = useState(null); 
   
-  // --- NEW: WORKSHOPS STATES ---
   const [workshops, setWorkshops] = useState([]);
   const [registeredWorkshops, setRegisteredWorkshops] = useState([]);
-    // --- MESSAGING STATES (جديد) ---
-  const [teachersList, setTeachersList] = useState([]); // قائمة المدرسين
-  const [selectedTeacher, setSelectedTeacher] = useState(null); // المدرس المحدد حالياً
-  const [chatMessages, setChatMessages] = useState([]); // رسائل المحادثة
-  const [messageText, setMessageText] = useState(''); // نص الرسالة المكتوبة
-  // --- NEW: COURSE PLAYER STATE ---
-  const [selectedCourse, setSelectedCourse] = useState(null); // To track YouTube-style view
+
+  // ✅ رسائل: حالات المراسلة
+  const [teachersList, setTeachersList] = useState([]);
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [messageText, setMessageText] = useState('');
+  const chatEndRef = useRef(null);
+
+  const [selectedCourse, setSelectedCourse] = useState(null);
   
-  // Data States
   const [enrollments, setEnrollments] = useState([]); 
   const [interests, setInterests] = useState([]);
   const [apps, setApps] = useState([]);
   
-  // Profile Data
   const [profileData, setProfileData] = useState({ 
     name: '', 
     bio: '', 
@@ -74,7 +69,36 @@ export const StudentDashboard = () => {
   
   const [trainingData, setTrainingData] = useState({ company: '', cv: '' });
   const [testScore, setTestScore] = useState(null);
-  
+
+  // ✅ رسائل: تلقائي اسكرول لآخر رسالة
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  // ✅ رسائل: استخراج المدرسين من الكورسات المسجلة
+  useEffect(() => {
+    if (activeEnrollments.length === 0) {
+      setTeachersList([]);
+      return;
+    }
+    const teachersMap = new Map();
+    activeEnrollments.forEach(e => {
+      if (e.course && e.course.teacher) {
+        const t = e.course.teacher;
+        if (t._id && !teachersMap.has(t._id)) {
+          teachersMap.set(t._id, {
+            _id: t._id,
+            name: t.name || t.full_name || 'Teacher',
+            email: t.email || '',
+            courseTitle: e.course.title || ''
+          });
+        }
+      }
+    });
+    setTeachersList(Array.from(teachersMap.values()));
+  }, [activeEnrollments]);
 
   // === 1. جلب البيانات ===
   useEffect(() => {
@@ -100,7 +124,6 @@ export const StudentDashboard = () => {
             return await res.json();
         };
 
-        // أ) جلب الكورسات المكتملة (My CV) - هون رح تظهر الشهادات
         const cvRes = await fetch('http://localhost:5000/api/students/cv', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -109,13 +132,11 @@ export const StudentDashboard = () => {
           if(cvData) setEnrollments(cvData);
         } else {
             console.error("CV Fetch Error:", cvRes.statusText);
-            // Mock Data للتجربة
             setEnrollments([
                 { _id: 101, completed_at: new Date(), course: { _id: 1, title: 'Full Stack Development', teacher: { name: 'Dr. Ahmad' }, duration_hours: 40, category: 'Programming' } }
             ]);
         }
   
-        // ب) جلب الكورسات النشطة
         const enrollRes = await fetch('http://localhost:5000/api/enrollments/my', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -124,7 +145,6 @@ export const StudentDashboard = () => {
           if(enrollData) setActiveEnrollments(enrollData);
         }
   
-        // ج) جلب الوظائف
         const intRes = await fetch('http://localhost:5000/api/internships', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -135,7 +155,6 @@ export const StudentDashboard = () => {
             }
         }
 
-        // --- NEW: MOCK WORKSHOPS ---
         setWorkshops([
             { id: 1, title: 'Advanced React Patterns', date: '2023-11-15', location: 'Online', capacity: 50, enrolled: 12 },
             { id: 2, title: 'Cyber Security Basics', date: '2023-11-20', location: 'Room 101', capacity: 30, enrolled: 5 }
@@ -161,6 +180,78 @@ export const StudentDashboard = () => {
   
     loadData();
   }, [user?.id]);
+
+  // ✅ رسائل: جلب محادثة مع مدرس معيّن
+  const loadConversation = async (otherUserId) => {
+    if (!otherUserId) {
+      setChatMessages([]);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/conversation/${otherUserId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        setChatMessages(msgs);
+      } else {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      setChatMessages([]);
+    }
+  };
+
+  // ✅ رسائل: إرسال رسالة
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!selectedTeacher) {
+      return alert("Please select a teacher first");
+    }
+    if (!messageText.trim()) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('http://localhost:5000/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          receiver: selectedTeacher._id,
+          message: messageText
+        })
+      });
+
+      if (res.ok) {
+        const newMsg = await res.json();
+        setChatMessages(prev => [...prev, newMsg]);
+        setMessageText('');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to send message");
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Server Error");
+    }
+  };
+
+  // ✅ رسائل: عند اختيار مدرس → حمّل المحادثة
+  const handleSelectTeacher = (teacher) => {
+    setSelectedTeacher(teacher);
+    loadConversation(teacher._id);
+  };
+
+  // ✅ رسائل: تحقق إذا الرسالة مني
+  const isMyMessage = (msg) => {
+    const senderId = msg.sender?._id || msg.sender;
+    const myId = user?.id || user?._id;
+    return senderId?.toString() === myId?.toString();
+  };
 
   // === 2. حفظ البروفايل ===
   const handleSaveProfile = async () => {
@@ -203,8 +294,6 @@ export const StudentDashboard = () => {
 
       const data = await res.json();
       
-      // --- تعديل هام: فلترة آمنة لتجنب الأخطاء ---
-      // نتأكد أن الكورس والـ ID موجودين قبل محاولة جلبهم
       const enrolledIds = activeEnrollments
         .filter(e => e && e.course && e.course._id)
         .map(e => e.course._id);
@@ -214,7 +303,7 @@ export const StudentDashboard = () => {
         .map(c => c.course._id);
       
       let available = data.filter(c => 
-        c._id && // تأكد أن الكورس لديه ID
+        c._id &&
         !enrolledIds.includes(c._id) && 
         !completedIds.includes(c._id)
       );
@@ -226,11 +315,10 @@ export const StudentDashboard = () => {
       setSearchResults(available);
     } catch (error) {
       console.error("Search Error:", error);
-      alert("Error searching courses"); // رسالة واضحة للمستخدم
+      alert("Error searching courses");
     }
   };
 
-  // === 4. التسجيل في كورس ===
   const handleEnroll = async (courseId) => {
     try {
       const token = localStorage.getItem('token');
@@ -267,7 +355,6 @@ export const StudentDashboard = () => {
     }
   };
 
-  // === 5. تقديم طلب تدريب ===
   const handleApply = async (e, companyIdOverride = null) => {
     if (e) e.preventDefault();
     const targetCompanyId = companyIdOverride || trainingData.company;
@@ -318,10 +405,9 @@ export const StudentDashboard = () => {
     }
   };
 
-  // === EXAM HANDLERS (Connected to Backend) ===
   const startExam = async (exam) => {
       const token = localStorage.getItem('token');
-      setExamResult(null); // Reset previous result
+      setExamResult(null);
       
       try {
           if (exam.id && typeof exam.id === 'string' && exam.id.length > 5) {
@@ -370,37 +456,23 @@ export const StudentDashboard = () => {
           }
       });
       const score = Math.round((correctCount / currentExam.questions.length) * 100);
-      
-      // Set result state instead of alerting immediately
       setExamResult({ score, passed: score > 60 });
-      
-      // Keep current exam active in background to show result over it or clear it?
-      // Let's keep it to show the context, but user can close result to go back.
   };
 
-  // --- COURSE PLAYER HANDLERS ---
   const handleFinishCourse = (course) => {
       if (window.confirm("Are you sure you want to mark this course as complete? You will receive a certificate.")) {
-          // 1. Remove from Active Enrollments
           setActiveEnrollments(activeEnrollments.filter(e => e.course._id !== course._id));
-          
-          // 2. Add to Completed Enrollments
           const newCompletion = {
               _id: Date.now(),
               completed_at: new Date(),
               course: course
           };
           setEnrollments([...enrollments, newCompletion]);
-          
-          // 3. Open Certificate
           setCertificateModal(course);
-          
-          // 4. Close Player
           setSelectedCourse(null);
       }
   };
 
-  // --- NEW: WORKSHOP REGISTRATION HANDLER ---
   const handleRegisterWorkshop = (workshopId) => {
       if(registeredWorkshops.includes(workshopId)) return;
       setRegisteredWorkshops([...registeredWorkshops, workshopId]);
@@ -408,7 +480,6 @@ export const StudentDashboard = () => {
       alert("Registered Successfully!");
   };
 
-  // === CERTIFICATE HANDLER ===
   const handlePrintCertificate = () => {
       window.print();
   };
@@ -429,7 +500,7 @@ export const StudentDashboard = () => {
       onClick={() => { 
         setActiveTab(id); 
         setIsEditingProfile(false); 
-        setSelectedCourse(null); // Reset player when switching tabs
+        setSelectedCourse(null);
       }} 
       className={`relative flex items-center gap-2 px-6 py-4 font-medium transition-all duration-300 
         ${activeTab === id 
@@ -448,7 +519,6 @@ export const StudentDashboard = () => {
   return (
     <div className={`relative z-0 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
       
-      {/* Print Styles for Certificate */}
       <style>{`
         @media print {
           body * {
@@ -476,14 +546,12 @@ export const StudentDashboard = () => {
         }
       `}</style>
 
-      {/* Header */}
       <div className="no-print">
       <header className="flex justify-between items-center py-8 px-6">
             <div className="text-left">
               <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                 Student Portal
               </h1>
-              {/* UPDATED: Shows real name instead of just 'Student' */}
               <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">
                 Welcome, {profileData.name || user?.name || 'Student'}
               </p>
@@ -497,9 +565,8 @@ export const StudentDashboard = () => {
         </header>
       </div>
 
-      {/* Full Width Navigation Bar */}
       <div className={`flex overflow-x-auto border-b gap-2 rounded-t-xl px-2 shadow-sm mb-8 mx-6 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'} no-print`}>
-        <div className="">
+        <div>
             <div className="flex overflow-x-auto gap-2 scrollbar-hide">
                 <TabButton id="profile" label="My Profile" icon={User} />
                 <TabButton id="courses" label="My Courses" icon={BookOpen} />
@@ -507,7 +574,7 @@ export const StudentDashboard = () => {
                 <TabButton id="exams" label="Exams" icon={ClipboardList} />
                 <TabButton id="internships" label="Internships" icon={Briefcase} />
                 <TabButton id="training" label="Training" icon={Award} />
-                <TabButton id="invitations" label="Invitations" icon={Mail} />
+                <TabButton id="messages" label="Messages" icon={MessageSquare} />
             </div>
         </div>
       </div>
@@ -524,7 +591,7 @@ export const StudentDashboard = () => {
             className="w-full px-6"
           >
             
-            {/* --- 1. MY PROFILE SECTION (UNCHANGED) --- */}
+            {/* --- 1. MY PROFILE SECTION --- */}
             {activeTab === 'profile' && (
               <div className="w-full relative">
                 {!isEditingProfile && (
@@ -711,7 +778,6 @@ export const StudentDashboard = () => {
                                 </div>
 
                                 <div className="lg:col-span-2 space-y-8">
-                                    
                                     <div>
                                         <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Personal Information</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -797,7 +863,6 @@ export const StudentDashboard = () => {
                                           className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
                                         ></textarea>
                                     </div>
-
                                 </div>
                             </div>
                         </div>
@@ -808,7 +873,7 @@ export const StudentDashboard = () => {
               </div>
             )}
 
-            {/* --- 2. WORKSHOPS SECTION (UNCHANGED) --- */}
+            {/* --- 2. WORKSHOPS SECTION --- */}
             {activeTab === 'workshops' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 no-print">
                     <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
@@ -851,14 +916,12 @@ export const StudentDashboard = () => {
                 </div>
             )}
 
-            {/* --- 3. COURSES SECTION (UPDATED: YouTube Style & Player) --- */}
+            {/* --- 3. COURSES SECTION --- */}
             {activeTab === 'courses' && (
               <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
                  
-                {/* A. COURSE PLAYER VIEW (NEW) */}
                 {selectedCourse ? (
                     <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        {/* Video Placeholder Area */}
                         <div className="w-full aspect-video bg-black flex items-center justify-center relative group">
                             <Play size={64} className="text-white/50 group-hover:text-white transition-colors" />
                             <div className="absolute bottom-4 left-4 text-white">
@@ -867,7 +930,6 @@ export const StudentDashboard = () => {
                             </div>
                         </div>
 
-                        {/* Player Controls & Info */}
                         <div className="p-6">
                             <div className="flex justify-between items-start mb-6">
                                 <div>
@@ -882,7 +944,6 @@ export const StudentDashboard = () => {
                                 </button>
                             </div>
 
-                            {/* Course Syllabus (Mock) */}
                             <div className={`p-6 rounded-xl mb-8 ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
                                 <h3 className="font-bold text-lg mb-4">Course Content</h3>
                                 <div className="space-y-3">
@@ -898,353 +959,260 @@ export const StudentDashboard = () => {
                                 </div>
                             </div>
 
-                            {/* Finish Course Button */}
                             <div className="flex justify-end">
                                 <button 
                                     onClick={() => handleFinishCourse(selectedCourse.course || selectedCourse)}
-                                    className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-bold shadow-lg shadow-green-500/30 transition-all flex items-center gap-2 transform hover:scale-105"
+                                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center gap-2 transition-colors shadow-lg shadow-green-500/30"
                                 >
-                                    <Award size={20} /> Finish Course & Get Certificate
+                                    <Trophy size={18}/> Mark as Complete & Get Certificate
                                 </button>
                             </div>
                         </div>
                     </div>
                 ) : (
-                    /* B. LIST VIEW (Original Logic) */
                     <>
-                         {/* قسم البحث */}
+                        {/* Search Bar */}
                         <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Search size={20}/> Find New Courses</h3>
-                            <div className="flex gap-4">
-                            <input 
-                                type="text" 
-                                placeholder="Search course title..." 
-                                className={`flex-1 px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200'}`}
-                                value={searchTerm}
-                                onChange={e=>setSearchTerm(e.target.value)}
-                                onKeyDown={e=>e.key==='Enter' && handleSearch()}
-                            />
-                            <button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl font-bold transition-colors">Search</button>
+                            <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Find & Enroll in Courses</h2>
+                            <div className="flex gap-3">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search by course title..." 
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                    className={`flex-1 px-4 py-3 rounded-xl border outline-none text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
+                                />
+                                <button onClick={handleSearch} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors">
+                                    <Search size={18}/> Search
+                                </button>
                             </div>
                         </div>
 
+                        {/* Search Results */}
                         {searchResults.length > 0 && (
-                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-                            {searchResults.map(course => (
-                                <div key={course._id} className={`p-5 rounded-xl border flex flex-col justify-between ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
-                                <div>
-                                    <h4 className="font-bold text-lg mb-1">{course.title}</h4>
-                                    <p className="text-xs text-gray-500 mb-2">Teacher: {course.teacher?.name || 'Unknown'}</p>
-                                    <p className="text-sm text-gray-400 line-clamp-2">{course.description}</p>
+                            <div>
+                                <h3 className="text-lg font-bold mb-4">Search Results</h3>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {searchResults.map(c => (
+                                        <div key={c._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                            <h4 className="font-bold text-lg mb-2">{c.title}</h4>
+                                            <p className="text-sm text-gray-500 mb-2">{c.category} · {c.level}</p>
+                                            <p className="text-sm text-gray-400 mb-4 line-clamp-2">{c.description}</p>
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-bold text-blue-600">${c.price || 0}</span>
+                                                <button onClick={() => handleEnroll(c._id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">Enroll</button>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                                <button onClick={() => handleEnroll(course._id)} className="mt-4 w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"><Plus size={16} /> Enroll Now</button>
-                                </div>
-                            ))}
                             </div>
                         )}
 
-                        {/* قسم الكورسات النشطة */}
+                        {/* Active Enrollments */}
                         <div>
-                            <h3 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Active Courses</h3>
+                            <h3 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Active Courses</h3>
                             {activeEnrollments.length === 0 ? (
-                                <p className="text-gray-500 text-center py-8 border border-dashed rounded-xl">No active enrollments.</p>
-                            ) : (
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {activeEnrollments.map(enr => (
-                                    <div key={enr._id} className={`p-4 rounded-xl border shadow-sm hover:shadow-lg transition-all cursor-pointer group ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
-                                        onClick={() => setSelectedCourse(enr)}
-                                    >
-                                        <div className="aspect-video bg-gray-200 dark:bg-slate-700 rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
-                                            <Play size={40} className="text-white/70 group-hover:scale-110 transition-transform" />
-                                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
-                                        </div>
-                                        <div className="px-1">
-                                            <h4 className="font-bold text-lg mb-1 truncate">{enr.course?.title}</h4>
-                                            <p className="text-xs text-gray-500 mb-3">Teacher: {enr.course?.teacher?.name}</p>
-                                            
-                                            <div className="mb-2">
-                                                <div className="flex justify-between text-xs mb-1">
-                                                    <span>Progress</span>
-                                                    <span>{enr.progress || 0}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-200 rounded-full h-1.5 dark:bg-slate-700">
-                                                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" style={{ width: `${enr.progress || 0}%` }}></div>
-                                                </div>
-                                            </div>
-
-                                            <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                                                Resume Learning
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* قسم الكورسات المكتملة + الشهادات */}
-                        <div>
-                            <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Completed Courses (CV)</h2>
-                            {enrollments.length === 0 ? (
-                                <div className="text-center py-20 text-gray-500">
-                                <p>No courses completed yet.</p>
-                                </div>
-                            ) : (
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {enrollments.map((item, index) => (
-                                    <div key={index} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <CheckCircle className="text-green-500" size={20} />
-                                            <h3 className="font-bold text-lg">{item.course?.title || "Course Title"}</h3>
-                                        </div>
-                                        <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
-                                            Completed on: {new Date(item.completed_at).toLocaleDateString()}
-                                        </p>
-                                        {/* CERTIFICATE BUTTON */}
-                                        <button 
-                                        onClick={() => setCertificateModal(item.course)}
-                                        className="w-full mt-2 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                                        >
-                                        <Award size={16}/> View Certificate
-                                        </button>
-                                    </div>
-                                ))}
-                                </div>
-                            )}
-                        </div>
-                    </>
-                )}
-              </div>
-            )}
-
-            {/* --- 4. EXAMS SECTION (UPDATED: Immediate Results) --- */}
-            {activeTab === 'exams' && (
-                <div className="max-w-4xl mx-auto px-6 py-8 no-print">
-                    {!currentExam && !examResult ? (
-                        <div>
-                            <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
-                            {exams.length === 0 ? (
                                 <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
-                                    <p className="text-gray-500">No exams available right now.</p>
+                                    <BookOpen size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                                    <p className="text-gray-500">No active courses. Search and enroll above!</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
-                                    {exams.map(exam => (
-                                        <div key={exam.id} className={`p-6 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:shadow-md transition-all'}`}>
-                                            <div>
-                                                <h3 className="font-bold text-xl mb-1">{exam.title}</h3>
-                                                <p className="text-sm text-gray-500 flex items-center gap-2"><Clock size={14}/> {exam.questions.length} Questions</p>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {activeEnrollments.map(e => (
+                                        <div 
+                                            key={e._id} 
+                                            onClick={() => setSelectedCourse(e)} 
+                                            className={`p-6 rounded-xl border shadow-sm cursor-pointer hover:shadow-lg hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400">
+                                                <Play size={16}/> Continue Learning
                                             </div>
-                                            <Button onClick={() => startExam(exam)}>Start Exam</Button>
+                                            <h4 className="font-bold text-lg mb-1">{e.course?.title || 'Untitled Course'}</h4>
+                                            <p className="text-sm text-gray-500">{e.course?.teacher?.name || 'Unknown Instructor'}</p>
+                                            <div className="mt-4 flex justify-between items-center text-xs text-gray-400">
+                                                <span>{e.course?.category || ''}</span>
+                                                <span>{e.course?.duration_hours || 0}h</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
-                    ) : examResult ? (
-                        /* RESULT VIEW */
-                        <div className={`max-w-md mx-auto p-8 rounded-2xl border shadow-2xl text-center ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 ${examResult.passed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                {examResult.passed ? <CheckCircle size={40} /> : <X size={40} />}
-                            </div>
-                            <h2 className={`text-3xl font-bold mb-2 ${examResult.passed ? 'text-green-600' : 'text-red-600'}`}>
-                                {examResult.passed ? 'Passed!' : 'Failed'}
-                            </h2>
-                            <p className="text-gray-500 dark:text-slate-400 mb-6">You scored</p>
-                            <div className="text-5xl font-extrabold text-slate-800 dark:text-white mb-8">{examResult.score}%</div>
-                            
-                            <div className="p-4 rounded-lg bg-gray-50 dark:bg-slate-700/50 mb-8">
-                                <p className="text-sm text-gray-500">
-                                    {examResult.score >= 60 
-                                        ? "Congratulations! You have successfully passed the exam." 
-                                        : "Unfortunately, you did not meet the passing grade of 60%. Please review the material and try again."}
-                                </p>
-                            </div>
 
-                            <Button onClick={() => { setCurrentExam(null); setExamResult(null); }}>
-                                Back to Exams List
-                            </Button>
-                        </div>
-                    ) : (
-                        /* TAKING EXAM VIEW */
-                        <div className={`p-8 rounded-2xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <div className="flex justify-between items-center mb-8 border-b pb-4 dark:border-slate-700">
-                                <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{currentExam.title}</h2>
-                                <span className="text-sm font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">In Progress</span>
-                            </div>
-                            
-                            <div className="space-y-8">
-                                {currentExam.questions.map((q, idx) => (
-                                    <div key={idx}>
-                                        <p className="font-bold text-lg mb-4"><span className="text-gray-400 mr-2">Q{idx+1}.</span> {q.text}</p>
-                                        <div className="space-y-3">
-                                            {q.options.map((opt, oIdx) => (
-                                                <label key={oIdx} className={`flex items-center p-4 rounded-lg border cursor-pointer transition-all ${examAnswers[idx] === oIdx ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'}`}>
-                                                    <input 
-                                                        type="radio" 
-                                                        name={`q-${idx}`} 
-                                                        className="w-4 h-4 text-blue-600"
-                                                        checked={examAnswers[idx] === oIdx}
-                                                        onChange={() => handleAnswerChange(idx, oIdx)}
-                                                    />
-                                                    <span className="ml-3">{opt}</span>
-                                                </label>
-                                            ))}
+                        {/* Completed Courses / Certificates */}
+                        {enrollments.length > 0 && (
+                            <div>
+                                <h3 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Completed Courses & Certificates</h3>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {enrollments.map(c => (
+                                        <div key={c._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                            <div className="flex items-center gap-2 mb-2 text-green-600 dark:text-green-400">
+                                                <Trophy size={16}/> Completed
+                                            </div>
+                                            <h4 className="font-bold text-lg mb-1">{c.course?.title || 'Course'}</h4>
+                                            <p className="text-sm text-gray-500 mb-3">{c.course?.teacher?.name || ''} · {new Date(c.completed_at).toLocaleDateString()}</p>
+                                            <button onClick={() => setCertificateModal(c.course)} className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                                <Award size={16}/> View Certificate
+                                            </button>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="mt-8 pt-6 border-t dark:border-slate-700 flex justify-end">
-                                <Button onClick={submitExam} className="bg-green-600 hover:bg-green-700">Submit Exam</Button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* --- 5. INTERNSHIPS SECTION (UNCHANGED) --- */}
-            {activeTab === 'internships' && (
-              <div className="max-w-7xl mx-auto px-6 py-8 no-print">
-                <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
-                {approvedInternships.length === 0 ? (
-                    <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
-                        <p className="text-gray-500">No internships approved yet.</p>
-                    </div>
-                ) : (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {approvedInternships.map(internship => (
-                            <div key={internship._id} className={`p-6 rounded-xl border shadow-sm hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                <div className="mb-4">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="font-bold text-lg">{internship.title}</h4>
-                                        <span className={`text-xs px-2 py-1 rounded bg-gray-100 dark:bg-slate-700 text-gray-600`}>{internship.type}</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mb-2 mt-1">{internship.company?.email || 'Company'}</p>
-                                    <div className="flex items-center gap-1 text-xs text-gray-400"><MapPin size={12}/> {internship.location}</div>
+                                    ))}
                                 </div>
-                                <div className="text-sm text-gray-500 mb-4 line-clamp-2 h-10">{internship.description}</div>
-                                <button 
-                                    onClick={() => {
-                                        const input = document.createElement('input');
-                                        input.type = 'file';
-                                        input.onchange = (e) => {
-                                            if (e.target.files && e.target.files[0]) {
-                                                setCvFile(e.target.files[0]);
-                                                handleApply(null, internship.company._id);
-                                            }
-                                        };
-                                        input.click();
-                                    }}
-                                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                                >
-                                    Apply Now
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* Certificate Modal */}
+                {certificateModal && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                        <div className={`w-full max-w-3xl rounded-2xl shadow-2xl p-8 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                            <button onClick={() => setCertificateModal(null)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500 no-print"><X size={24}/></button>
+                            
+                            <div id="certificate-print-area" className={`border-4 border-double border-amber-500 p-10 text-center ${darkMode ? 'bg-slate-900' : 'bg-amber-50'}`}>
+                                <Trophy size={48} className="mx-auto text-amber-500 mb-4"/>
+                                <h2 className="text-4xl font-extrabold text-slate-800 dark:text-white mb-2">Certificate of Completion</h2>
+                                <p className="text-gray-500 mb-8">This is to certify that</p>
+                                <h3 className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-4">{profileData.name || user?.name}</h3>
+                                <p className="text-gray-600 dark:text-slate-300 mb-2">has successfully completed the course</p>
+                                <h4 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{certificateModal.title}</h4>
+                                <div className="flex justify-around items-end mt-8">
+                                    <div>
+                                        <div className="w-40 border-b-2 border-gray-400 mb-2"></div>
+                                        <p className="text-sm text-gray-500">Instructor</p>
+                                    </div>
+                                    <div>
+                                        <div className="w-40 border-b-2 border-gray-400 mb-2"></div>
+                                        <p className="text-sm text-gray-500">Date</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end mt-6 no-print">
+                                <button onClick={handlePrintCertificate} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors">
+                                    <Printer size={16}/> Print Certificate
                                 </button>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    </motion.div>
                 )}
               </div>
             )}
 
-            {/* --- 6. TRAINING SECTION (UNCHANGED) --- */}
-            {activeTab === 'training' && (
-              <div className="max-w-6xl mx-auto px-6 py-8 no-print">
-                <div className={`p-8 rounded-3xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                  <h2 className="text-2xl font-bold mb-8 text-slate-900 dark:text-white">Apply for Training</h2>
-                  <div className="grid md:grid-cols-2 gap-12">
-                      <form onSubmit={(e) => handleApply(e)} className="space-y-6">
-                          <div>
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Target Company ID</label>
-                              <input 
-                                required 
-                                placeholder="e.g. 64a5b..." 
-                                className={`w-full px-5 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-primary-200 transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} 
-                                value={trainingData.company} 
-                                onChange={e=>setTrainingData({...trainingData, company:e.target.value})} 
-                              />
-                          </div>
-                          <div>
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Upload CV (PDF)</label>
-                              <input 
-                                type="file" 
-                                className="hidden" 
-                                id="cv-upload" 
-                                onChange={handleFileChange}
-                              />
-                              <div 
-                                onClick={() => document.getElementById('cv-upload').click()}
-                                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50/50 transition-all ${darkMode ? 'border-slate-600 hover:bg-slate-700/50' : 'border-gray-300'}`}
-                              >
-                                  <Upload size={48} className="mx-auto mb-4 text-gray-400"/>
-                                  <p className="text-base text-gray-500 font-medium">{cvFile ? cvFile.name : "Click to upload CV"}</p>
-                              </div>
-                          </div>
-                          <Button type="submit" className="w-full py-3 text-lg">Submit Application</Button>
-                      </form>
-                      <div>
-                          <h3 className="font-bold text-xl mb-6 text-slate-800 dark:text-white">My Applications</h3>
-                          <div className="space-y-4">
-                              {apps.length === 0 ? <p className="text-gray-400 text-sm bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl text-center">No applications yet.</p> : apps.map(app => (
-                                  <div key={app.id} className={`flex justify-between items-center p-5 rounded-xl ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                                      <div><p className="font-bold text-lg">{app.companyName}</p><p className="text-xs text-gray-500">{new Date(app.date).toLocaleDateString()}</p></div>
-                                      <span className={`text-sm px-4 py-1.5 rounded-full font-bold ${app.status === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{app.status}</span>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  </div>
-                </div>
-              </div>
-            )}
-                        {/* --- NEW: INVITATIONS SECTION (UNCHANGED) --- */}
-                        {activeTab === 'invitations' && (
-                <div className="max-w-5xl mx-auto px-6 py-8 no-print">
-                    <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Invitations</h2>
-                    
-                    {/* Mock Data for Invitations */}
-                    {[
-                        { id: 101, companyName: 'Tech Solutions', role: 'Junior React Developer', date: new Date().toLocaleDateString(), status: 'pending' },
-                        { id: 102, companyName: 'Innovate Corp', role: 'Data Analyst Intern', date: new Date().toLocaleDateString(), status: 'accepted' }
-                    ].filter(inv => inv.status !== 'rejected').length === 0 ? (
-                        <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
-                            <p className="text-gray-500">No invitations pending.</p>
+            {/* --- 4. EXAMS SECTION --- */}
+            {activeTab === 'exams' && (
+                <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
+                    {currentExam ? (
+                        <div className={`w-full max-w-3xl mx-auto rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div className={`p-6 border-b ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">{currentExam.title}</h2>
+                                        <p className="text-sm text-gray-500">{currentExam.questions.length} Questions</p>
+                                    </div>
+                                    <button onClick={() => { setCurrentExam(null); setExamResult(null); setExamAnswers({}); }} className="text-gray-500 hover:text-red-500">
+                                        <X size={24}/>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {examResult ? (
+                                <div className="p-8 text-center">
+                                    <div className={`w-32 h-32 mx-auto rounded-full flex items-center justify-center mb-6 ${examResult.passed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                        {examResult.passed ? <Trophy size={64}/> : <XCircle size={64}/>}
+                                    </div>
+                                    <h3 className={`text-3xl font-bold mb-2 ${examResult.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                        {examResult.passed ? 'Passed!' : 'Failed'}
+                                    </h3>
+                                    <p className="text-xl text-gray-600 dark:text-slate-300 mb-6">Score: {examResult.score}%</p>
+                                    <button onClick={() => { setCurrentExam(null); setExamResult(null); setExamAnswers({}); }} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors">
+                                        Back to Exams
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="p-6 space-y-6">
+                                    {currentExam.questions.map((q, qIdx) => (
+                                        <div key={qIdx} className={`p-5 rounded-xl border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                            <p className="font-bold mb-4 text-slate-800 dark:text-white">Q{qIdx + 1}: {q.text}</p>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {q.options.map((opt, oIdx) => (
+                                                    <button 
+                                                        key={oIdx}
+                                                        onClick={() => handleAnswerChange(qIdx, oIdx)}
+                                                        className={`p-3 rounded-lg border text-left text-sm transition-all ${
+                                                            examAnswers[qIdx] === oIdx 
+                                                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold' 
+                                                                : `${darkMode ? 'border-slate-600 hover:border-slate-500' : 'border-gray-200 hover:border-gray-300'}`
+                                                        }`}
+                                                    >
+                                                        {opt}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-end">
+                                        <button 
+                                            onClick={submitExam}
+                                            className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center gap-2 transition-colors shadow-lg shadow-green-500/30"
+                                        >
+                                            <CheckCircle size={18}/> Submit Exam
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            {[ 
-                                { id: 101, companyName: 'Tech Solutions', role: 'Junior React Developer', date: new Date().toLocaleDateString(), status: 'pending' },
-                                { id: 102, companyName: 'Innovate Corp', role: 'Data Analyst Intern', date: new Date().toLocaleDateString(), status: 'accepted' }
-                            ].map(inv => (
-                                <div key={inv.id} className={`p-6 rounded-xl border shadow-sm flex flex-col md:flex-row items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                    <div className="flex items-center gap-4 mb-4 md:mb-0">
-                                        <div className={`p-4 rounded-full ${inv.companyName.includes('Tech') ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
-                                            <Briefcase size={24}/>
+                        <>
+                            <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
+                            {exams.length === 0 ? (
+                                <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                                    <ClipboardList size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                                    <p className="text-gray-500">No exams available right now.</p>
+                                </div>
+                            ) : (
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {exams.map(exam => (
+                                        <div key={exam.id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                            <ClipboardList size={24} className="text-blue-500 mb-3"/>
+                                            <h4 className="font-bold text-lg mb-2">{exam.title}</h4>
+                                            <p className="text-sm text-gray-500 mb-4">{exam.questions.length} Questions</p>
+                                            <button onClick={() => startExam(exam)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                                                <Play size={16}/> Start Exam
+                                            </button>
                                         </div>
-                                        <div>
-                                            <h3 className="font-bold text-lg">{inv.companyName}</h3>
-                                            <p className="text-sm text-gray-500">{inv.role} • Invited on {inv.date}</p>
-                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* --- 5. INTERNSHIPS SECTION --- */}
+            {activeTab === 'internships' && (
+                <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
+                    <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
+                    {approvedInternships.length === 0 ? (
+                        <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
+                            <Briefcase size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                            <p className="text-gray-500">No approved internships available right now.</p>
+                        </div>
+                    ) : (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {approvedInternships.map(intern => (
+                                <div key={intern._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                    <Briefcase size={24} className="text-blue-500 mb-3"/>
+                                    <h4 className="font-bold text-lg mb-1">{intern.title || intern.company_name || 'Internship'}</h4>
+                                    <p className="text-sm text-gray-500 mb-2">{intern.location || 'Remote'}</p>
+                                    <p className="text-sm text-gray-400 line-clamp-3 mb-4">{intern.description || 'No description'}</p>
+                                    <div className="flex justify-between items-center text-xs text-gray-400 mb-4">
+                                        <span className="flex items-center gap-1"><Clock size={12}/> {intern.duration || '3 months'}</span>
+                                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Approved</span>
                                     </div>
-                                    
-                                    {inv.status === 'pending' ? (
-                                        <div className="flex gap-3">
-                                            <button 
-                                                onClick={() => alert(`Invitation from ${inv.companyName} rejected.`)}
-                                                className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-50 font-bold transition-colors"
-                                            >
-                                                Decline
-                                            </button>
-                                            <button 
-                                                onClick={() => alert(`Invitation from ${inv.companyName} accepted! Application sent.`)}
-                                                className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 font-bold transition-colors"
-                                            >
-                                                Accept
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-bold uppercase">Accepted</span>
-                                    )}
+                                    <button onClick={(e) => handleApply(e, intern.company?._id || intern._id)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                                        Apply Now
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -1252,113 +1220,183 @@ export const StudentDashboard = () => {
                 </div>
             )}
 
+            {/* --- 6. TRAINING SECTION --- */}
+            {activeTab === 'training' && (
+                <div className="max-w-3xl mx-auto px-6 py-8 space-y-8 no-print">
+                    <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Training Applications</h2>
+                    
+                    <div className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Submit Training Request</h3>
+                        <form onSubmit={(e) => handleApply(e)} className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Company Name / ID</label>
+                                <input 
+                                    required
+                                    value={trainingData.company}
+                                    onChange={(e) => setTrainingData({...trainingData, company: e.target.value})}
+                                    className={`w-full px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
+                                    placeholder="Enter company name or ID"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Upload CV</label>
+                                <div className={`border-2 border-dashed rounded-xl p-6 text-center ${darkMode ? 'border-slate-600 hover:border-slate-500' : 'border-gray-300 hover:border-gray-400'} transition-colors`}>
+                                    <Upload size={32} className="mx-auto text-gray-400 mb-2"/>
+                                    <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="text-sm"/>
+                                    {cvFile && <p className="text-sm text-green-500 mt-2">Selected: {cvFile.name}</p>}
+                                </div>
+                            </div>
+                            <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                                <Send size={18}/> Submit Application
+                            </button>
+                        </form>
+                    </div>
+
+                    {apps.length > 0 && (
+                        <div>
+                            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">My Applications</h3>
+                            <div className="space-y-3">
+                                {apps.map(app => (
+                                    <div key={app.id} className={`flex items-center justify-between p-4 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                        <div>
+                                            <p className="font-semibold">{app.companyName}</p>
+                                            <p className="text-xs text-gray-400">{new Date(app.date).toLocaleDateString()}</p>
+                                        </div>
+                                        <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                                            app.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                            app.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                            'bg-red-100 text-red-700'
+                                        }`}>{app.status}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ✅ --- 7. MESSAGES SECTION --- مزبطّت بالكامل */}
+            {activeTab === 'messages' && (
+              <div className={`max-w-7xl mx-auto rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                
+                {/* Sidebar - Teachers List */}
+                <div className={`w-1/3 border-r flex flex-col ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="p-4 border-b dark:border-slate-700">
+                    <h3 className="font-bold mb-3">My Teachers</h3>
+                    <p className="text-xs text-gray-400 mb-2">Teachers from your enrolled courses</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    {teachersList.length === 0 ? (
+                      <div className="p-6 text-center">
+                        <User size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-2"/>
+                        <p className="text-sm text-gray-400">No teachers found.</p>
+                        <p className="text-xs text-gray-400 mt-1">Enroll in courses to see your teachers here.</p>
+                      </div>
+                    ) : (
+                      teachersList.map(t => (
+                        <div 
+                          key={t._id} 
+                          onClick={() => handleSelectTeacher(t)} 
+                          className={`p-4 cursor-pointer border-b dark:border-slate-700 flex items-center gap-3 transition-colors ${selectedTeacher?._id === t._id ? 'bg-blue-50 dark:bg-slate-700 border-l-4 border-l-blue-500' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 flex-shrink-0">
+                            <GraduationCap size={18}/>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">{t.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{t.email}</p>
+                            <p className="text-[10px] text-blue-500 truncate mt-0.5">{t.courseTitle}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Chat Area */}
+                <div className="w-2/3 flex flex-col">
+                  {/* Chat Header */}
+                  <div className={`border-b p-4 dark:border-slate-700 ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
+                    {selectedTeacher ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400">
+                          <GraduationCap size={18}/>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm">{selectedTeacher.name}</h3>
+                          <p className="text-xs text-green-500 flex items-center gap-1"><CheckCircle size={10}/> Teacher</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <h3 className="font-bold text-gray-400">Select a teacher to start chatting</h3>
+                    )}
+                  </div>
+
+                  {/* Messages Area */}
+                  <div id="chat-messages" className="flex-1 p-4 overflow-y-auto space-y-3">
+                    {!selectedTeacher ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <MessageSquare size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                          <p className="text-gray-400">Choose a teacher from the list to start a conversation</p>
+                        </div>
+                      </div>
+                    ) : chatMessages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <Send size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
+                          <p className="text-gray-400">No messages yet. Say hello to {selectedTeacher.name}!</p>
+                        </div>
+                      </div>
+                    ) : (
+                      chatMessages.map(m => {
+                        const mine = isMyMessage(m);
+                        return (
+                          <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div className="max-w-[75%]">
+                              <p className={`text-[10px] mb-1 px-1 ${mine ? 'text-right text-gray-400' : 'text-left text-gray-400'}`}>
+                                {mine ? 'You' : selectedTeacher.name} · {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                                mine 
+                                  ? 'bg-blue-600 text-white rounded-br-md' 
+                                  : `${darkMode ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-bl-md`
+                              }`}>
+                                <p>{m.message}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Message Input */}
+                  <form onSubmit={handleSendMessage} className="p-4 border-t dark:border-slate-700 flex gap-2">
+                    <input 
+                      required 
+                      disabled={!selectedTeacher}
+                      placeholder={selectedTeacher ? `Message ${selectedTeacher.name}...` : "Select a teacher first"} 
+                      className={`flex-1 px-4 py-2.5 border rounded-xl text-sm outline-none transition-colors ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-300 placeholder-gray-400'} ${!selectedTeacher ? 'opacity-50 cursor-not-allowed' : 'focus:border-blue-500'}`}
+                      value={messageText} 
+                      onChange={e => setMessageText(e.target.value)} 
+                    />
+                    <Button 
+                      type="submit" 
+                      disabled={!selectedTeacher || !messageText.trim()}
+                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${!selectedTeacher || !messageText.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                    >
+                      <Send size={18}/>
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            )}
+
           </motion.div>
         </AnimatePresence>
       )}
-
-      {/* --- ENHANCED CERTIFICATE MODAL (UNCHANGED) --- */}
-      {certificateModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div id="certificate-print-area" className="relative bg-white text-slate-900 w-[950px] max-w-full p-0 shadow-2xl flex flex-col items-center text-center overflow-hidden">
-                
-                {/* Border */}
-                <div className="absolute inset-[20px] border-[2px] border-slate-200 pointer-events-none"></div>
-                <div className="absolute inset-[24px] border-double border-[8px] border-yellow-500 pointer-events-none rounded-sm"></div>
-
-                {/* Header Section */}
-                <div className="relative z-10 pt-16 pb-8 px-12 w-full flex flex-col items-center">
-                    <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mb-6 border border-yellow-100">
-                        <Trophy size={48} className="text-yellow-600" />
-                    </div>
-                    
-                    <h1 className="text-5xl font-serif font-bold text-slate-800 mb-1 tracking-widest uppercase">Certificate</h1>
-                    <h2 className="text-xl text-yellow-700 font-semibold tracking-widest uppercase mb-4">Of Completion</h2>
-                    <div className="h-1 w-32 bg-yellow-400 mb-8"></div>
-                    
-                    <p className="text-lg text-slate-500 font-medium uppercase tracking-wider mb-2">Proudly Presented To</p>
-                    <h3 className="text-5xl font-serif font-extrabold text-blue-900 border-b-2 border-blue-200 pb-4 px-8 w-full max-w-3xl leading-tight">
-                        {profileData.name}
-                    </h3>
-                </div>
-
-                {/* Middle Section */}
-                <div className="relative z-10 px-12 w-full flex flex-col items-center mb-12">
-                    <p className="text-lg text-slate-500 font-medium uppercase tracking-wider mb-4">For Successfully Completing</p>
-                    <h4 className="text-3xl font-serif text-slate-800 font-bold max-w-2xl leading-tight mb-8">
-                        {certificateModal.title}
-                    </h4>
-                    
-                    {/* New: Details Grid */}
-                    <div className="w-full max-w-3xl grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-lg border border-slate-100 text-left mb-8">
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Certificate ID</p>
-                            <p className="text-slate-800 font-mono font-bold tracking-widest">CERT-2023-{Math.floor(Math.random()*10000)}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Issue Date</p>
-                            <p className="text-slate-800 font-bold">{new Date().toLocaleDateString()}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Duration</p>
-                            <p className="text-slate-800 font-bold">{certificateModal.duration_hours || 40} Hours</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Grade</p>
-                            <p className="text-green-700 font-bold uppercase">Excellent</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Footer / Signatures */}
-                <div className="relative z-10 w-full px-12 pb-16 flex justify-between items-end mt-4">
-                    
-                    {/* Instructor Signature */}
-                    <div className="flex flex-col items-center w-1/3 border-r border-slate-200 pr-8">
-                        <div className="mb-4 text-blue-500 font-cursive text-3xl font-serif italic opacity-80">Dr. Signature</div>
-                        <div className="h-0.5 w-full bg-slate-400 mb-2"></div>
-                        <p className="font-bold text-slate-800">{certificateModal.teacher?.name || 'Course Instructor'}</p>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide">Instructor</p>
-                    </div>
-
-                    {/* Verification Info */}
-                    <div className="flex flex-col items-center w-1/3 border-r border-slate-200 pr-8">
-                         <div className="p-3 border border-slate-300 rounded-full mb-2 bg-slate-50">
-                             <ShieldCheck size={24} className="text-slate-400"/>
-                         </div>
-                         <p className="text-xs text-slate-400 font-mono">VERIFY AT: verify.edu/cert/{Math.floor(Math.random()*9999)}</p>
-                    </div>
-
-                    {/* Director Signature */}
-                    <div className="flex flex-col items-center w-1/3">
-                         <div className="mb-4 text-blue-500 font-cursive text-3xl font-serif italic opacity-80">John Doe</div>
-                        <div className="h-0.5 w-full bg-slate-400 mb-2"></div>
-                        <p className="font-bold text-slate-800">Academic Director</p>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide">EduTech University</p>
-                    </div>
-
-                </div>
-
-                {/* Print Controls (Hidden on Print) */}
-                <div className="absolute top-6 right-6 flex gap-3 no-print z-50">
-                    <button 
-                        onClick={() => setCertificateModal(null)}
-                        className="bg-red-500 hover:bg-red-600 text-white p-3 rounded-lg shadow-lg transition-colors"
-                        title="Close"
-                    >
-                        <X size={20} />
-                    </button>
-                    <button 
-                        onClick={handlePrintCertificate}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-lg transition-colors"
-                        title="Print / Save PDF"
-                    >
-                        <Printer size={20} /> Print / Save PDF
-                    </button>
-                </div>
-            </div>
-        </div>
-      )}
-
     </div>
   );
 };
