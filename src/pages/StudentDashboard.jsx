@@ -49,8 +49,21 @@ export const StudentDashboard = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
   const chatEndRef = useRef(null);
+    // ✅ AI Chatbot States
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [aiMessages, setAiMessages] = useState([{ role: 'bot', text: 'Hi! How can I help you today? 🎓' }]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiChatEndRef = useRef(null);
+  const WEBHOOK_URL = 'http://localhost:5678/webhook-test/chat'; // ضع رابط الويب هوك هنا
+
+  useEffect(() => {
+    aiChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [aiMessages]);
+
 
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   
   const [enrollments, setEnrollments] = useState([]); 
   const [interests, setInterests] = useState([]);
@@ -253,6 +266,27 @@ export const StudentDashboard = () => {
     return senderId?.toString() === myId?.toString();
   };
 
+    // ✅ AI Chatbot Function
+  const sendAiMessage = async () => {
+    const text = aiInput.trim();
+    if (!text || aiLoading) return;
+    setAiMessages(prev => [...prev, { role: 'user', text }]);
+    setAiInput('');
+    setAiLoading(true);
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      const data = await res.json();
+      setAiMessages(prev => [...prev, { role: 'bot', text: data.output || data.message || 'Error.' }]);
+    } catch (err) {
+      setAiMessages(prev => [...prev, { role: 'bot', text: 'Connection error.' }]);
+    }
+    setAiLoading(false);
+  };
+
   // === 2. حفظ البروفايل ===
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('token');
@@ -328,13 +362,20 @@ export const StudentDashboard = () => {
       });
 
       if (res.ok) {
-        const contentType = res.headers.get("content-type");
-        let newEnrollment = {};
+        // ✅ أوجد الكورس الكامل من نتائج البحث (اللي فيها الفيديوهات وبيانات الاستاذ)
+        const fullCourseData = searchResults.find(c => c._id === courseId);
         
-        if (contentType && contentType.includes("application/json")) {
-            newEnrollment = await res.json();
+        if (!fullCourseData) {
+          alert("Error: Course data lost");
+          return;
         }
-        
+
+        // ✅ أنشئ عنصر تسجيل يحتوي على بيانات الكورس كاملة (وليس البيانات الفارغة من الباك إند)
+        const newEnrollment = {
+          _id: Date.now(), // ID مؤقت للواجهة
+          course: fullCourseData 
+        };
+
         alert("Enrolled Successfully!");
         setSearchResults(searchResults.filter(c => c._id !== courseId));
         setActiveEnrollments([...activeEnrollments, newEnrollment]);
@@ -524,7 +565,11 @@ export const StudentDashboard = () => {
           body * {
             visibility: hidden;
           }
-          #certificate-print-area, #certificate-print-area * {
+          #
+          @keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}certificate-print-area, #certificate-print-area * {
             visibility: visible;
           }
           #certificate-print-area {
@@ -920,56 +965,127 @@ export const StudentDashboard = () => {
             {activeTab === 'courses' && (
               <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
                  
-                {selectedCourse ? (
-                    <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <div className="w-full aspect-video bg-black flex items-center justify-center relative group">
-                            <Play size={64} className="text-white/50 group-hover:text-white transition-colors" />
-                            <div className="absolute bottom-4 left-4 text-white">
-                                <h2 className="text-2xl font-bold drop-shadow-md">{selectedCourse.course?.title || selectedCourse.title}</h2>
-                                <p className="text-sm opacity-80">Lesson 1 of {selectedCourse.course?.duration_hours || 10}</p>
-                            </div>
-                        </div>
+               {selectedCourse ? (
+    <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+        
+        {/* ✅ عرض الفيديو إذا موجود */}
+        {selectedCourse.videos && selectedCourse.videos.length > 0 ? (
+            <div className="w-full aspect-video bg-black">
+                <video 
+                    key={selectedCourse.videos[currentVideoIndex]?.url} 
+                    className="w-full h-full"
+                    controls
+                    autoPlay
+                >
+                    <source 
+                        src={selectedCourse.videos[currentVideoIndex]?.url?.startsWith('http') 
+                            ? selectedCourse.videos[currentVideoIndex].url 
+                            : `http://localhost:5000${selectedCourse.videos[currentVideoIndex].url}`
+                        } 
+                        type="video/mp4" 
+                    />
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        ) : (
+            /* لو مفيش فيديو */
+            <div className="w-full aspect-video bg-black flex items-center justify-center relative group">
+                <Play size={64} className="text-white/50 group-hover:text-white transition-colors" />
+                <div className="absolute bottom-4 left-4 text-white">
+                    <h2 className="text-2xl font-bold">{selectedCourse.title}</h2>
+                    <p className="text-sm opacity-75">No videos available</p>
+                </div>
+            </div>
+        )}
 
-                        <div className="p-6">
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <h1 className="text-3xl font-bold mb-2 text-slate-800 dark:text-white">{selectedCourse.course?.title || selectedCourse.title}</h1>
-                                    <p className="text-gray-500 dark:text-slate-400">Instructor: {selectedCourse.course?.teacher?.name || 'Unknown'}</p>
-                                </div>
-                                <button 
-                                    onClick={() => setSelectedCourse(null)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg font-medium text-sm transition-colors"
-                                >
-                                    <ArrowLeft size={16}/> Back to Courses
-                                </button>
+        {/* ✅ قائمة الفيديوهات (Playlist) */}
+        {selectedCourse.videos && selectedCourse.videos.length > 0 && (
+            <div className={`p-4 border-t ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                <h4 className="font-bold mb-3 flex items-center gap-2">
+                    <Play size={16} className="text-blue-500" /> 
+                    Course Videos ({selectedCourse.videos.length})
+                </h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {selectedCourse.videos.map((video, index) => (
+                        <button
+                            key={video._id || index}
+                            onClick={() => setCurrentVideoIndex(index)}
+                            className={`w-full text-left flex items-center gap-3 p-3 rounded-lg transition-all ${
+                                currentVideoIndex === index
+                                    ? 'bg-blue-600 text-white shadow-md'
+                                    : darkMode
+                                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                                        : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+                            }`}
+                        >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                currentVideoIndex === index ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600 dark:bg-slate-600 dark:text-slate-300'
+                            }`}>
+                                {currentVideoIndex === index ? (
+                                    <Play size={14} className="ml-0.5" />
+                                ) : (
+                                    index + 1
+                                )}
                             </div>
+                            <span className="text-sm font-medium truncate">{video.title || `Video ${index + 1}`}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )}
 
-                            <div className={`p-6 rounded-xl mb-8 ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                                <h3 className="font-bold text-lg mb-4">Course Content</h3>
-                                <div className="space-y-3">
-                                    {[1, 2, 3].map(i => (
-                                        <div key={i} className="flex items-center justify-between p-3 border border-gray-200 dark:border-slate-600 rounded-lg">
-                                            <div className="flex items-center gap-3">
-                                                <CheckCircle size={18} className="text-green-500" />
-                                                <span className="font-medium">Module {i}: Introduction to Concepts</span>
-                                            </div>
-                                            <span className="text-sm text-gray-500">15:00</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+        {/* ✅ تفاصيل الكورس */}
+        <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {selectedCourse.title}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        By: {selectedCourse.teacher?.name || selectedCourse.teacher?.full_name || 'Unknown Teacher'}
+                    </p>
+                </div>
+                <button 
+                    onClick={() => setSelectedCourse(null)} 
+                    className="text-gray-500 hover:text-red-500 p-2"
+                >
+                    <ArrowLeft size={24} />
+                </button>
+            </div>
+            
+            <div className="flex flex-wrap gap-3 mb-4">
+                {selectedCourse.category && (
+                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-3 py-1 rounded-full font-medium">
+                        {selectedCourse.category}
+                    </span>
+                )}
+                {selectedCourse.level && (
+                    <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-3 py-1 rounded-full font-medium">
+                        {selectedCourse.level}
+                    </span>
+                )}
+                {selectedCourse.duration_hours && (
+                    <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-3 py-1 rounded-full font-medium flex items-center gap-1">
+                        <Clock size={12} /> {selectedCourse.duration_hours} Hours
+                    </span>
+                )}
+            </div>
 
-                            <div className="flex justify-end">
-                                <button 
-                                    onClick={() => handleFinishCourse(selectedCourse.course || selectedCourse)}
-                                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center gap-2 transition-colors shadow-lg shadow-green-500/30"
-                                >
-                                    <Trophy size={18}/> Mark as Complete & Get Certificate
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
+            <p className={`leading-relaxed mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                {selectedCourse.description}
+            </p>
+
+            <button 
+                onClick={() => handleFinishCourse(selectedCourse)}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+                <CheckCircle size={18} /> Mark as Complete
+            </button>
+        </div>
+    </div>
+) : (
+    /* ... باقي كود عرض الكورسات كـ كاردز ... */
+
                     <>
                         {/* Search Bar */}
                         <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -1397,6 +1513,71 @@ export const StudentDashboard = () => {
           </motion.div>
         </AnimatePresence>
       )}
+            {/* ✅ AI Chatbot Floating UI */}
+      <>
+        <button 
+          onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+          className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white items-center justify-center shadow-2xl z-50 transition-transform hover:scale-110"
+          style={{ display: 'flex' }}
+        >
+          {isAiChatOpen ? <X size={28} /> : <MessageSquare size={28} />}
+        </button>
+
+        {isAiChatOpen && (
+          <div className={`fixed bottom-24 right-6 w-96 h-[500px] rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-200 text-slate-800'}`}
+               style={{ animation: 'slideUp 0.3s ease' }}>
+            
+            <div className="p-4 bg-blue-600 text-white flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">🤖</div>
+              <div>
+                <h3 className="font-bold">Smart AI Assistant</h3>
+                <span className="text-xs text-blue-200 flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full inline-block"></span> Online</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3" style={{ background: darkMode ? '#1e293b' : '#f8fafc' }}>
+              {aiMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-md' : `${darkMode ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-700 border border-gray-100'} rounded-bl-md`}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {aiLoading && (
+                <div className="flex justify-start">
+                  <div className={`p-3 rounded-2xl rounded-bl-md ${darkMode ? 'bg-slate-700' : 'bg-white border border-gray-100'}`}>
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={aiChatEndRef} />
+            </div>
+
+            <div className={`p-3 flex gap-2 border-t ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+              <input
+                type="text"
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendAiMessage()}
+                placeholder="Ask me anything..."
+                className={`flex-1 px-4 py-2.5 rounded-xl border outline-none text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
+                disabled={aiLoading}
+              />
+              <button 
+                onClick={sendAiMessage} 
+                disabled={aiLoading || !aiInput.trim()}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-xl transition-colors flex items-center"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </>
     </div>
   );
 };

@@ -43,7 +43,7 @@ export const AdminDashboard = () => {
   };
 
   // === دالة System Shutdown ===
-  const handleSystemShutdown = async () => {
+   const handleSystemShutdown = async () => {
     if (!window.confirm('Are you sure you want to shutdown the system? This will make the entire platform unavailable.')) return;
     setShuttingDown(true);
     try {
@@ -68,7 +68,6 @@ export const AdminDashboard = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
-
       try {
         const tRes = await axios.get('http://localhost:5000/api/admin/pending/teacher', config);
         
@@ -154,17 +153,22 @@ export const AdminDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      let url = action === 'approved' ? `http://localhost:5000/api/admin/approved/${id}` : `http://localhost-5000/api/admin/reject/${id}`;
+      let url = action === 'approved' 
+        ? `http://localhost:5000/api/admin/approved/${id}` 
+        : `http://localhost:5000/api/admin/reject/${id}`;
       const response = await axios.put(url, {}, config);
-      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Teacher ${action}d successfully!`); }
+      if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Teacher ${action} successfully!`); }
     } catch (err) { console.error(err); alert("Failed to update teacher status."); }
   };
 
   const handleCompanyAction = async (id, action) => {
     try {
       const token = localStorage.getItem('token');
-      const url = action === 'approved' ? `http://localhost:5000/api/admin/approved/${id}` : `http://localhost-5000/api/admin/reject/${id}`;
-      const response = await axios.put(url, {}, { headers: { Authorization: `Bearer ${token}` } });
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      let url = action === 'approved' 
+        ? `http://localhost:5000/api/admin/approved/${id}` 
+        : `http://localhost:5000/api/admin/reject/${id}`;
+      const response = await axios.put(url, {}, config);
       if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Company ${action} successfully!`); }
     } catch (err) { console.error(err); alert("Failed to update company status."); }
   };
@@ -173,7 +177,9 @@ export const AdminDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      let url = action === 'approved' ? `http://localhost:5000/api/admin/approve/course/${id}` : `http://localhost:5000/api/admin/reject/course/${id}`;
+      let url = action === 'approved' 
+        ? `http://localhost:5000/api/admin/approve/course/${id}` 
+        : `http://localhost:5000/api/admin/reject/course/${id}`;
       const response = await axios.put(url, {}, config);
       if(response.status === 200) { setRefresh(prev => prev + 1); alert(`Course ${action}d successfully!`); }
     } catch (err) { console.error("Error in handleContentAction:", err); alert("Failed to update course status."); }
@@ -484,22 +490,41 @@ export const AdminDashboard = () => {
                          <Power size={24} />
                        </div>
                        <div>
-                         <h4 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-gray-800'}`}>System Shutdown</h4>
-                         <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Shut down the entire platform. All users will be logged out and the system will enter maintenance mode.</p>
+                         <h4 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-gray-800'}`}>System {settings.maintenanceMode ? 'is Down' : 'Shutdown'}</h4>
+                         <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                           {settings.maintenanceMode ? 'The platform is currently unavailable for users.' : 'Shut down the entire platform. All users will be logged out.'}
+                         </p>
                        </div>
                      </div>
-                     <button
-                       onClick={handleSystemShutdown}
-                       disabled={shuttingDown || settings.maintenanceMode}
-                       className={`px-6 py-3 rounded-lg font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
-                         settings.maintenanceMode
-                           ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-500 cursor-not-allowed'
-                           : 'bg-red-600 hover:bg-red-700 text-white'
-                       }`}
-                     >
-                       <Power size={16} />
-                       {shuttingDown ? 'Shutting Down...' : settings.maintenanceMode ? 'System is Down' : 'Shutdown System'}
-                     </button>
+                     <div className="flex gap-3">
+                       {settings.maintenanceMode && (
+                         <button
+                           onClick={async () => {
+                             try {
+                               const token = localStorage.getItem('token');
+                               await axios.post('http://localhost:5000/api/admin/start', {}, { headers: { Authorization: `Bearer ${token}` } });
+                               setSettings(prev => ({ ...prev, maintenanceMode: false }));
+                               alert('System is back online!');
+                             } catch (err) { alert('Failed to start system.'); }
+                           }}
+                           className="px-6 py-3 rounded-lg font-bold text-sm bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                         >
+                           Start System
+                         </button>
+                       )}
+                       <button
+                         onClick={handleSystemShutdown}
+                         disabled={shuttingDown || settings.maintenanceMode}
+                         className={`px-6 py-3 rounded-lg font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+                           settings.maintenanceMode
+                             ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-500 cursor-not-allowed'
+                             : 'bg-red-600 hover:bg-red-700 text-white'
+                         }`}
+                       >
+                         <Power size={16} />
+                         {shuttingDown ? 'Shutting Down...' : settings.maintenanceMode ? 'System is Down' : 'Shutdown System'}
+                       </button>
+                     </div>
                    </div>
                  </div>
                </div>
