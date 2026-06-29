@@ -195,27 +195,27 @@ export const StudentDashboard = () => {
   }, [user?.id]);
 
   // ✅ رسائل: جلب محادثة مع مدرس معيّن
-  const loadConversation = async (otherUserId) => {
-    if (!otherUserId) {
-      setChatMessages([]);
-      return;
-    }
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`http://localhost:5000/api/messages/conversation/${otherUserId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const msgs = await res.json();
-        setChatMessages(msgs);
-      } else {
-        setChatMessages([]);
-      }
-    } catch (error) {
-      console.error("Error loading conversation:", error);
+const loadConversation = async (teacherId) => {
+  if (!teacherId) {
+    setChatMessages([]);
+    return;
+  }
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch(`http://localhost:5000/api/messages/conversation/${teacherId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const msgs = await res.json();
+      setChatMessages(msgs);
+    } else {
       setChatMessages([]);
     }
-  };
+  } catch (error) {
+    console.error('Error:', error);
+    setChatMessages([]);
+  }
+};
 
   // ✅ رسائل: إرسال رسالة
   const handleSendMessage = async (e) => {
@@ -556,6 +556,17 @@ export const StudentDashboard = () => {
       )}
     </button>
   );
+  const getVideoUrl = (video) => {
+    if (!video) return '';
+    if (video.url && video.url.startsWith('http')) return video.url;
+    if (video.url && video.url.startsWith('/')) return `http://localhost:5000${video.url}`;
+    return video.url || '';
+  };
+
+  const getVideoTitle = (video, index) => {
+    if (!video) return `Video ${index + 1}`;
+    return video.title || `Video ${index + 1}`;
+  };
 
   return (
     <div className={`relative z-0 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
@@ -962,259 +973,245 @@ export const StudentDashboard = () => {
             )}
 
             {/* --- 3. COURSES SECTION --- */}
+    {/* --- 3. COURSES SECTION --- */}
             {activeTab === 'courses' && (
               <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
                  
                {selectedCourse ? (
-    <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-        
-        {/* ✅ عرض الفيديو إذا موجود */}
-        {selectedCourse.videos && selectedCourse.videos.length > 0 ? (
-            <div className="w-full aspect-video bg-black">
-                <video 
-                    key={selectedCourse.videos[currentVideoIndex]?.url} 
-                    className="w-full h-full"
-                    controls
-                    autoPlay
-                >
-                    <source 
-                        src={selectedCourse.videos[currentVideoIndex]?.url?.startsWith('http') 
-                            ? selectedCourse.videos[currentVideoIndex].url 
-                            : `http://localhost:5000${selectedCourse.videos[currentVideoIndex].url}`
-                        } 
-                        type="video/mp4" 
-                    />
-                    Your browser does not support the video tag.
-                </video>
-            </div>
-        ) : (
-            /* لو مفيش فيديو */
-            <div className="w-full aspect-video bg-black flex items-center justify-center relative group">
-                <Play size={64} className="text-white/50 group-hover:text-white transition-colors" />
-                <div className="absolute bottom-4 left-4 text-white">
-                    <h2 className="text-2xl font-bold">{selectedCourse.title}</h2>
-                    <p className="text-sm opacity-75">No videos available</p>
-                </div>
-            </div>
-        )}
-
-        {/* ✅ قائمة الفيديوهات (Playlist) */}
-        {selectedCourse.videos && selectedCourse.videos.length > 0 && (
-            <div className={`p-4 border-t ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                <h4 className="font-bold mb-3 flex items-center gap-2">
-                    <Play size={16} className="text-blue-500" /> 
-                    Course Videos ({selectedCourse.videos.length})
-                </h4>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {selectedCourse.videos.map((video, index) => (
-                        <button
-                            key={video._id || index}
-                            onClick={() => setCurrentVideoIndex(index)}
-                            className={`w-full text-left flex items-center gap-3 p-3 rounded-lg transition-all ${
-                                currentVideoIndex === index
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : darkMode
-                                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                                        : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
-                            }`}
+                <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    
+                    {/* رأس الكورس */}
+                    <div className={`p-6 border-b ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                        <button 
+                            onClick={() => { setSelectedCourse(null); setCurrentVideoIndex(0); }} 
+                            className="flex items-center gap-2 text-blue-500 hover:text-blue-600 mb-4 font-medium"
                         >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                currentVideoIndex === index ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600 dark:bg-slate-600 dark:text-slate-300'
-                            }`}>
-                                {currentVideoIndex === index ? (
-                                    <Play size={14} className="ml-0.5" />
-                                ) : (
-                                    index + 1
-                                )}
-                            </div>
-                            <span className="text-sm font-medium truncate">{video.title || `Video ${index + 1}`}</span>
+                            <ArrowLeft size={18} /> Back to Courses
                         </button>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {/* ✅ تفاصيل الكورس */}
-        <div className="p-6">
-            <div className="flex justify-between items-start mb-4">
-                <div>
-                    <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                        {selectedCourse.title}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                        By: {selectedCourse.teacher?.name || selectedCourse.teacher?.full_name || 'Unknown Teacher'}
-                    </p>
-                </div>
-                <button 
-                    onClick={() => setSelectedCourse(null)} 
-                    className="text-gray-500 hover:text-red-500 p-2"
-                >
-                    <ArrowLeft size={24} />
-                </button>
-            </div>
-            
-            <div className="flex flex-wrap gap-3 mb-4">
-                {selectedCourse.category && (
-                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-3 py-1 rounded-full font-medium">
-                        {selectedCourse.category}
-                    </span>
-                )}
-                {selectedCourse.level && (
-                    <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-3 py-1 rounded-full font-medium">
-                        {selectedCourse.level}
-                    </span>
-                )}
-                {selectedCourse.duration_hours && (
-                    <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-3 py-1 rounded-full font-medium flex items-center gap-1">
-                        <Clock size={12} /> {selectedCourse.duration_hours} Hours
-                    </span>
-                )}
-            </div>
-
-            <p className={`leading-relaxed mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                {selectedCourse.description}
-            </p>
-
-            <button 
-                onClick={() => handleFinishCourse(selectedCourse)}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-                <CheckCircle size={18} /> Mark as Complete
-            </button>
-        </div>
-    </div>
-) : (
-    /* ... باقي كود عرض الكورسات كـ كاردز ... */
-
-                    <>
-                        {/* Search Bar */}
-                        <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Find & Enroll in Courses</h2>
-                            <div className="flex gap-3">
-                                <input 
-                                    type="text" 
-                                    placeholder="Search by course title..." 
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                                    className={`flex-1 px-4 py-3 rounded-xl border outline-none text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
-                                />
-                                <button onClick={handleSearch} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors">
-                                    <Search size={18}/> Search
-                                </button>
-                            </div>
+                        <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{selectedCourse.title}</h2>
+                        <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{selectedCourse.description}</p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            {selectedCourse.category && <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-3 py-1 rounded-full">{selectedCourse.category}</span>}
+                            {selectedCourse.level && <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-3 py-1 rounded-full">{selectedCourse.level}</span>}
+                            {selectedCourse.duration_hours && <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-3 py-1 rounded-full flex items-center gap-1"><Clock size={12} /> {selectedCourse.duration_hours}h</span>}
                         </div>
+                    </div>
 
-                        {/* Search Results */}
-                        {searchResults.length > 0 && (
-                            <div>
-                                <h3 className="text-lg font-bold mb-4">Search Results</h3>
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {searchResults.map(c => (
-                                        <div key={c._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                            <h4 className="font-bold text-lg mb-2">{c.title}</h4>
-                                            <p className="text-sm text-gray-500 mb-2">{c.category} · {c.level}</p>
-                                            <p className="text-sm text-gray-400 mb-4 line-clamp-2">{c.description}</p>
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-bold text-blue-600">${c.price || 0}</span>
-                                                <button onClick={() => handleEnroll(c._id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">Enroll</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Active Enrollments */}
-                        <div>
-                            <h3 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Active Courses</h3>
-                            {activeEnrollments.length === 0 ? (
-                                <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
-                                    <BookOpen size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
-                                    <p className="text-gray-500">No active courses. Search and enroll above!</p>
-                                </div>
-                            ) : (
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {activeEnrollments.map(e => (
-                                        <div 
-                                            key={e._id} 
-                                            onClick={() => setSelectedCourse(e)} 
-                                            className={`p-6 rounded-xl border shadow-sm cursor-pointer hover:shadow-lg hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                        
+                        {/* مشغل الفيديو */}
+                        <div className="lg:col-span-2 p-6">
+                            {selectedCourse.videos && selectedCourse.videos.length > 0 ? (
+                                <>
+                                    <div className="relative w-full bg-black rounded-xl overflow-hidden aspect-video">
+                                        <video
+                                            key={currentVideoIndex}
+                                            controls
+                                            autoPlay
+                                            className="w-full h-full"
+                                            src={getVideoUrl(selectedCourse.videos[currentVideoIndex])}
                                         >
-                                            <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400">
-                                                <Play size={16}/> Continue Learning
-                                            </div>
-                                            <h4 className="font-bold text-lg mb-1">{e.course?.title || 'Untitled Course'}</h4>
-                                            <p className="text-sm text-gray-500">{e.course?.teacher?.name || 'Unknown Instructor'}</p>
-                                            <div className="mt-4 flex justify-between items-center text-xs text-gray-400">
-                                                <span>{e.course?.category || ''}</span>
-                                                <span>{e.course?.duration_hours || 0}h</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                            Your browser does not support the video tag.
+                                        </video>
+                                    </div>
+                                    <div className="mt-4">
+                                        <h3 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                                            {getVideoTitle(selectedCourse.videos[currentVideoIndex], currentVideoIndex)}
+                                        </h3>
+                                        <p className="text-xs text-gray-400 mt-1">Video {currentVideoIndex + 1} of {selectedCourse.videos.length}</p>
+                                    </div>
+                                    <div className="flex gap-3 mt-4">
+                                        <button
+                                            onClick={() => setCurrentVideoIndex(Math.max(0, currentVideoIndex - 1))}
+                                            disabled={currentVideoIndex === 0}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${currentVideoIndex === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                                        >
+                                            <ArrowLeft size={16} /> Previous
+                                        </button>
+                                        <button
+                                            onClick={() => setCurrentVideoIndex(Math.min(selectedCourse.videos.length - 1, currentVideoIndex + 1))}
+                                            disabled={currentVideoIndex === selectedCourse.videos.length - 1}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${currentVideoIndex === selectedCourse.videos.length - 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                                        >
+                                            Next <ArrowLeft size={16} className="rotate-180" />
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className={`flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed ${darkMode ? 'border-slate-600 bg-slate-700/30' : 'border-gray-300 bg-gray-50'}`}>
+                                    <Play size={48} className="text-gray-300 dark:text-slate-500 mb-4" />
+                                    <p className="text-gray-400 dark:text-slate-400 font-medium">No videos available yet</p>
+                                    <p className="text-xs text-gray-400 mt-1">The teacher hasn't uploaded videos for this course</p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Completed Courses / Certificates */}
-                        {enrollments.length > 0 && (
-                            <div>
-                                <h3 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Completed Courses & Certificates</h3>
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {enrollments.map(c => (
-                                        <div key={c._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                            <div className="flex items-center gap-2 mb-2 text-green-600 dark:text-green-400">
-                                                <Trophy size={16}/> Completed
-                                            </div>
-                                            <h4 className="font-bold text-lg mb-1">{c.course?.title || 'Course'}</h4>
-                                            <p className="text-sm text-gray-500 mb-3">{c.course?.teacher?.name || ''} · {new Date(c.completed_at).toLocaleDateString()}</p>
-                                            <button onClick={() => setCertificateModal(c.course)} className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                                                <Award size={16}/> View Certificate
-                                            </button>
+                        {/* قائمة الفيديوهات الجانبية */}
+                        <div className={`border-l p-4 ${darkMode ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-gray-50'}`}>
+                            <h4 className={`font-bold mb-4 text-sm uppercase tracking-wider ${darkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                                Videos ({selectedCourse.videos?.length || 0})
+                            </h4>
+                            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                                {selectedCourse.videos && selectedCourse.videos.map((video, index) => (
+                                    <button
+                                        key={video._id || index}
+                                        onClick={() => setCurrentVideoIndex(index)}
+                                        className={`w-full text-left p-3 rounded-lg transition-all flex items-start gap-3 ${currentVideoIndex === index ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : darkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-white hover:bg-blue-50 text-gray-700 border border-gray-200'}`}
+                                    >
+                                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${currentVideoIndex === index ? 'bg-white/20 text-white' : darkMode ? 'bg-slate-600 text-slate-300' : 'bg-blue-100 text-blue-600'}`}>
+                                            {currentVideoIndex === index ? <Play size={14} className="ml-0.5" /> : index + 1}
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{getVideoTitle(video, index)}</p>
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
-                        )}
-                    </>
-                )}
-
-                {/* Certificate Modal */}
-                {certificateModal && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                        <div className={`w-full max-w-3xl rounded-2xl shadow-2xl p-8 relative ${darkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
-                            <button onClick={() => setCertificateModal(null)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500 no-print"><X size={24}/></button>
-                            
-                            <div id="certificate-print-area" className={`border-4 border-double border-amber-500 p-10 text-center ${darkMode ? 'bg-slate-900' : 'bg-amber-50'}`}>
-                                <Trophy size={48} className="mx-auto text-amber-500 mb-4"/>
-                                <h2 className="text-4xl font-extrabold text-slate-800 dark:text-white mb-2">Certificate of Completion</h2>
-                                <p className="text-gray-500 mb-8">This is to certify that</p>
-                                <h3 className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-4">{profileData.name || user?.name}</h3>
-                                <p className="text-gray-600 dark:text-slate-300 mb-2">has successfully completed the course</p>
-                                <h4 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{certificateModal.title}</h4>
-                                <div className="flex justify-around items-end mt-8">
-                                    <div>
-                                        <div className="w-40 border-b-2 border-gray-400 mb-2"></div>
-                                        <p className="text-sm text-gray-500">Instructor</p>
-                                    </div>
-                                    <div>
-                                        <div className="w-40 border-b-2 border-gray-400 mb-2"></div>
-                                        <p className="text-sm text-gray-500">Date</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end mt-6 no-print">
-                                <button onClick={handlePrintCertificate} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors">
-                                    <Printer size={16}/> Print Certificate
+                            {selectedCourse.videos && selectedCourse.videos.length > 0 && (
+                                <button
+                                    onClick={() => handleFinishCourse(selectedCourse)}
+                                    className="w-full mt-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <CheckCircle size={18} /> Finish Course
                                 </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* معلومات الاستاذ */}
+                    {selectedCourse.teacher && (
+                        <div className={`p-6 border-t ${darkMode ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${darkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
+                                    {(selectedCourse.teacher.name || selectedCourse.teacher.full_name || 'T').charAt(0)}
+                                </div>
+                                <div>
+                                    <p className={`font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{selectedCourse.teacher.name || selectedCourse.teacher.full_name || 'Teacher'}</p>
+                                    <p className="text-sm text-gray-500">{selectedCourse.teacher.specialization || selectedCourse.teacher.email || ''}</p>
+                                </div>
                             </div>
                         </div>
-                    </motion.div>
+                    )}
+                </div>
+                ) : (
+                  <>
+                    {/* بحث */}
+                    <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Find Courses</h2>
+                        <div className="flex gap-3">
+                            <div className="flex-1 relative">
+                                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                    placeholder="Search by course title..."
+                                    className={`w-full pl-11 pr-4 py-3 rounded-xl border outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-blue-500' : 'bg-gray-50 border-gray-200 focus:border-blue-500'}`}
+                                />
+                            </div>
+                            <button onClick={handleSearch} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors">
+                                <Search size={18} /> Search
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* نتائج البحث */}
+                    {searchResults.length > 0 && (
+                        <div>
+                            <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Results ({searchResults.length})</h3>
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {searchResults.map(course => (
+                                    <div key={course._id} className={`p-6 rounded-xl border shadow-sm hover:shadow-lg transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                        {course.videos?.length > 0 && (
+                                            <div className="flex items-center gap-1.5 mb-3">
+                                                <Play size={14} className="text-blue-500" />
+                                                <span className="text-xs text-blue-500 font-semibold">{course.videos.length} Video(s)</span>
+                                            </div>
+                                        )}
+                                        <h4 className="font-bold text-lg mb-2">{course.title}</h4>
+                                        <p className={`text-sm mb-4 line-clamp-2 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>{course.description}</p>
+                                        <div className="flex flex-wrap gap-2 mb-3">
+                                            {course.category && <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full">{course.category}</span>}
+                                            {course.level && <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2 py-0.5 rounded-full">{course.level}</span>}
+                                            {course.price !== undefined && <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full">{course.price === 0 ? 'Free' : `$${course.price}`}</span>}
+                                        </div>
+                                        {course.teacher && <p className="text-xs text-gray-400 mb-4">By {course.teacher.name || course.teacher.full_name || 'Teacher'}</p>}
+                                        <button onClick={() => handleEnroll(course._id)} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors">
+                                            <Plus size={16} /> Enroll Now
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* كورساتي المسجلة */}
+                    <div>
+                        <h3 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Enrolled Courses ({activeEnrollments.length})</h3>
+                        {activeEnrollments.length === 0 ? (
+                            <div className={`p-12 text-center rounded-xl border-2 border-dashed ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
+                                <BookOpen size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-4" />
+                                <p className="text-gray-400">No courses enrolled yet</p>
+                            </div>
+                        ) : (
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {activeEnrollments.map(enrollment => {
+                                    const course = enrollment.course;
+                                    if (!course) return null;
+                                    return (
+                                        <div
+                                            key={enrollment._id || course._id}
+                                            onClick={() => { setSelectedCourse(course); setCurrentVideoIndex(0); }}
+                                            className={`p-6 rounded-xl border shadow-sm cursor-pointer hover:shadow-lg transition-all group ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
+                                        >
+                                            {course.videos?.length > 0 && (
+                                                <div className="flex items-center gap-1.5 mb-3">
+                                                    <Play size={14} className="text-blue-500" />
+                                                    <span className="text-xs text-blue-500 font-semibold">{course.videos.length} Video(s)</span>
+                                                </div>
+                                            )}
+                                            <h4 className="font-bold text-lg mb-2 group-hover:text-blue-500 transition-colors">{course.title}</h4>
+                                            <p className={`text-sm mb-4 line-clamp-2 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>{course.description}</p>
+                                            <div className="flex items-center justify-between text-xs text-gray-400">
+                                                <span>Enrolled</span>
+                                                <span className="flex items-center gap-1 text-blue-500 font-medium"><Play size={12} /> Watch</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* كورسات مكتملة */}
+                    {enrollments.length > 0 && (
+                        <div>
+                            <h3 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Completed ({enrollments.length})</h3>
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {enrollments.map(enrollment => {
+                                    const course = enrollment.course;
+                                    if (!course) return null;
+                                    return (
+                                        <div key={enrollment._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-green-700/50' : 'bg-white border-green-200'}`}>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <CheckCircle size={16} className="text-green-500" />
+                                                <span className="text-xs text-green-500 font-semibold">Completed</span>
+                                            </div>
+                                            <h4 className="font-bold text-lg mb-2">{course.title}</h4>
+                                            <button onClick={() => setCertificateModal(course)} className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 text-sm">
+                                                <Award size={16} /> Certificate
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
-
             {/* --- 4. EXAMS SECTION --- */}
             {activeTab === 'exams' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">

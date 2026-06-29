@@ -161,9 +161,9 @@ useEffect(() => {
     }
   };
 
-  const handleSendMessage = async (e) => {
+   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!msgData.receiverId) {
+    if (!selectedStudent) { // ✅ عدلناها من selectedTeacher لـ selectedStudent
       return alert("Please select a student first");
     }
     if (!msgData.text.trim()) return;
@@ -177,7 +177,7 @@ useEffect(() => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          receiver: msgData.receiverId,
+          receiver: msgData.receiverId, // ✅ الـ ID موجود هنا
           message: msgData.text
         })
       });
@@ -195,12 +195,17 @@ useEffect(() => {
       alert("Server Error");
     }
   };
+const handleSelectStudent = (student) => {
+  console.log("SELECTED STUDENT:", student);
 
-  const handleSelectStudent = (student) => {
-    setSelectedStudent(student);
-    setMsgData(prev => ({ ...prev, receiverId: student._id }));
-    loadConversation(student._id);
-  };
+  setSelectedStudent(student);
+  setMsgData(prev => ({
+    ...prev,
+    receiverId: student._id
+  }));
+
+  loadConversation(student._id);
+};
 
   const handleCreateWorkshop = async (e) => {
     e.preventDefault();
@@ -471,11 +476,12 @@ useEffect(() => {
     }
   };
 
-  const isMyMessage = (msg) => {
-    const senderId = msg.sender?._id || msg.sender;
-    const myId = user?.id || user?._id;
-    return senderId?.toString() === myId?.toString();
-  };
+ const isMyMessage = (msg) => {
+  const senderId = msg.sender?._id || msg.sender;
+  const myId = user?.id || user?._id;
+  if (!senderId || !myId) return false;
+  return senderId.toString() === myId.toString();
+};
 
   const getSenderName = (msg) => {
     if (isMyMessage(msg)) return "You";
@@ -1002,116 +1008,139 @@ useEffect(() => {
               </div>
             )}
 
-            {/* ========== 7. MESSAGES ========== */}
+                        {/* ========== 7. MESSAGES ========== */}
             {activeTab === 'communication' && (
-              <div className={`rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-
-                {/* Sidebar */}
-                <div className={`w-1/3 border-r flex flex-col ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`flex gap-6 h-[600px] ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                
+                {/* ===== قائمة الطلاب ===== */}
+                <div className={`w-80 flex-shrink-0 rounded-2xl border overflow-hidden flex flex-col ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                   <div className="p-4 border-b dark:border-slate-700">
-                    <h3 className="font-bold mb-3">Students</h3>
+                    <h3 className="font-bold text-lg mb-3">Students</h3>
                     <div className="relative">
-                      <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Search student..."
+                        placeholder="Search students..."
                         value={searchStudent}
-                        onChange={(e) => setSearchStudent(e.target.value)}
-                        className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300'}`}
+                        onChange={e => setSearchStudent(e.target.value)}
+                        className={`w-full pl-10 pr-4 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-300 placeholder-gray-400'}`}
                       />
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto">
+                    {/* ✅✅✅ فلترة الطلاب لإزالة التكرار قبل الـ Map ✅✅✅ */}
                     {students
-                      .filter(s => (s.name || s.full_name || '').toLowerCase().includes(searchStudent.toLowerCase()))
-                      .map(s => (
-                        <div
-                          key={s._id}
-                          onClick={() => handleSelectStudent(s)}
-                          className={`p-3 cursor-pointer border-b dark:border-slate-700 flex items-center gap-3 transition-colors ${selectedStudent?._id === s._id ? 'bg-blue-50 dark:bg-slate-700 border-l-4 border-l-blue-500' : 'hover:bg-gray-100 dark:hover:bg-slate-700/50'}`}
+                      .filter((student, index, self) => 
+                        index === self.findIndex((s) => s._id === student._id)
+                      )
+                      .filter(s => {
+                        const name = s.full_name || s.name || s.email || '';
+                        return name.toLowerCase().includes(searchStudent.toLowerCase());
+                      })
+                      .map(student => (
+                        <button
+                          key={student._id} // ✅ الآن الـ Key مو مكرر
+                          onClick={() => handleSelectStudent(student)}
+                          className={`w-full flex items-center gap-3 p-4 text-left transition-colors border-b dark:border-slate-700 ${
+                            selectedStudent?._id === student._id
+                              ? darkMode ? 'bg-blue-900/30 border-l-4 border-l-blue-500' : 'bg-blue-50 border-l-4 border-l-blue-500'
+                              : darkMode ? 'hover:bg-slate-700/50' : 'hover:bg-gray-50'
+                          }`}
                         >
-                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
-                            <User size={18} />
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                            darkMode ? 'bg-slate-600 text-slate-300' : 'bg-gray-200 text-gray-600'
+                          }`}>
+                            {(student.full_name || student.name || student.email || 'S').charAt(0).toUpperCase()}
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{s.name || s.full_name || 'Student'}</p>
-                            <p className="text-xs text-gray-400 truncate">{s.email || ''}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-sm truncate">{student.full_name || student.name || student.email?.split('@')[0]}</p>
+                            <p className="text-xs text-gray-400 truncate">{student.email}</p>
                           </div>
-                        </div>
+                        </button>
                       ))
                     }
-                    {students.filter(s => (s.name || s.full_name || '').toLowerCase().includes(searchStudent.toLowerCase())).length === 0 && (
-                      <div className="p-6 text-center text-gray-400 text-sm">No students found</div>
+                    {students.length === 0 && (
+                      <div className="p-8 text-center text-gray-400 text-sm">No students enrolled yet</div>
                     )}
                   </div>
                 </div>
 
-                {/* Chat Area */}
-                <div className="w-2/3 flex flex-col">
-                  {/* Chat Header */}
-                  <div className={`border-b p-4 dark:border-slate-700 ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
-                    {selectedStudent ? (
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
-                          <User size={18} />
+                {/* ===== منطقة الشات ===== */}
+                <div className={`flex-1 rounded-2xl border overflow-hidden flex flex-col ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                  
+                  {!selectedStudent ? (
+                    <div className="flex-1 flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <MessageSquare size={48} className="mx-auto mb-3 opacity-30" />
+                        <p>Select a student to start chatting</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Header */}
+                      <div className={`p-4 border-b flex items-center gap-3 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${darkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
+                          {(selectedStudent.full_name || selectedStudent.name || selectedStudent.email || 'S').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-sm">{selectedStudent.name || selectedStudent.full_name || 'Student'}</p>
-                          <p className="text-xs text-green-500 flex items-center gap-1"><CheckCircle size={10} /> Online</p>
+                          <p className="font-bold">{selectedStudent.full_name || selectedStudent.name || selectedStudent.email?.split('@')[0]}</p>
+                          <p className="text-xs text-gray-400">{selectedStudent.email}</p>
                         </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-400 text-center">Select a student to start chatting</p>
-                    )}
-                  </div>
 
-                  {/* Messages */}
-                  <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${darkMode ? 'bg-slate-900/50' : 'bg-gray-50'}`}>
-                    {selectedStudent && chatMessages.length === 0 && (
-                      <div className="text-center text-gray-400 text-sm mt-20">
-                        <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
-                        <p>No messages yet. Say hello!</p>
+                      {/* الرسائل */}
+                      <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${darkMode ? 'bg-slate-900/50' : 'bg-gray-50'}`}>
+                        {chatMessages.length === 0 && (
+                          <div className="text-center text-gray-400 text-sm mt-20">No messages yet. Say hello!</div>
+                        )}
+                        {chatMessages.map((msg, idx) => {
+                          const myMsg = isMyMessage(msg);
+                          return (
+                            <div
+                              key={msg._id || idx}
+                              className={`flex ${myMsg ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
+                                myMsg
+                                  ? 'bg-blue-600 text-white rounded-br-md'
+                                  : darkMode
+                                    ? 'bg-slate-700 text-slate-200 rounded-bl-md'
+                                    : 'bg-white text-gray-800 border border-gray-200 rounded-bl-md shadow-sm'
+                              }`}>
+                                <p className={`text-[10px] font-bold mb-1 ${myMsg ? 'text-blue-200' : 'text-blue-500'}`}>
+                                  {myMsg ? 'You' : (msg.sender?.full_name || msg.sender?.email?.split('@')[0] || 'Student')}
+                                </p>
+                                <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                                <p className={`text-[10px] mt-1 ${myMsg ? 'text-blue-200/70' : 'text-gray-400'}`}>
+                                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div ref={chatEndRef} />
                       </div>
-                    )}
-                    {chatMessages.map((msg, idx) => {
-                      const myMsg = isMyMessage(msg);
-                      return (
-                        <div key={idx} className={`flex ${myMsg ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${myMsg
-                              ? 'bg-blue-600 text-white rounded-br-md'
-                              : darkMode
-                                ? 'bg-slate-700 text-slate-200 rounded-bl-md'
-                                : 'bg-white text-slate-800 rounded-bl-md shadow-sm border border-gray-100'
-                            }`}>
-                            {!myMsg && <p className="text-xs font-bold mb-1 opacity-70">{getSenderName(msg)}</p>}
-                            <p>{msg.message || msg.text || ''}</p>
-                            <p className={`text-[10px] mt-1 ${myMsg ? 'text-blue-200' : 'text-gray-400'}`}>
-                              {new Date(msg.createdAt || msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div ref={chatEndRef} />
-                  </div>
 
-                  {/* Input */}
-                  {selectedStudent && (
-                    <form onSubmit={handleSendMessage} className={`border-t p-4 flex gap-3 ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'}`}>
-                      <input
-                        type="text"
-                        placeholder="Type a message..."
-                        value={msgData.text}
-                        onChange={e => setMsgData({ ...msgData, text: e.target.value })}
-                        className={`flex-1 px-4 py-2.5 rounded-xl border outline-none text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
-                      />
-                      <button
-                        type="submit"
-                        className="bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2"
-                      >
-                        <Send size={16} />
-                      </button>
-                    </form>
+                      {/* إرسال - لا يوجد selectedTeacher هنا ✅ */}
+                      <form onSubmit={handleSendMessage} className={`p-4 border-t flex gap-2 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                        <input
+                          required
+                          placeholder={`Message ${selectedStudent.full_name || selectedStudent.name || 'student'}...`}
+                          className={`flex-1 px-4 py-2.5 border rounded-xl text-sm outline-none transition-colors ${
+                            darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-blue-500' : 'bg-gray-50 border-gray-300 placeholder-gray-400 focus:border-blue-500'
+                          }`}
+                          value={msgData.text}
+                          onChange={e => setMsgData(prev => ({ ...prev, text: e.target.value }))}
+                        />
+                        <Button
+                          type="submit"
+                          disabled={!msgData.text.trim()}
+                          className="px-4 py-2.5 rounded-xl bg-blue-600 text-white flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Send size={18} />
+                        </Button>
+                      </form>
+                    </>
                   )}
                 </div>
               </div>
