@@ -44,22 +44,22 @@ export const TeacherDashboard = () => {
 
   // ✅ البروفايل مباشرة في الداتا
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileData, setProfileData] = useState({
-    full_name: 'Dr. Ahmed Al-Rashid',
-    phone: '+962 79 123 4567',
-    specialization: 'Full-Stack Web Development',
-    qualifications: 'PhD in Computer Science',
-    years_experince: '12',
-    linkedin_url: 'https://linkedin.com/in/ahmed-alrashid',
-    cv_url: '/cv/ahmed-alrashid.pdf',
-    university: 'University of Jordan',
-    country: 'Jordan',
-    gradYear: '2012',
-    dob: '1985-03-15',
-    bio: 'Experienced Full-Stack Developer and educator with 12+ years in the industry. Passionate about teaching modern web technologies and building scalable applications.'
-  });
+const [profileData, setProfileData] = useState({
+    full_name: '',
+    phone: '',
+    specialization: '',
+    qualifications: '',
+    years_experince: '',
+    linkedin_url: '',
+    cv_url: '',
+    university: '',
+    country: '',
+    gradYear: '',
+    dob: '',
+    bio: ''
+});
 
-  const [interests, setInterests] = useState(['Web Development', 'AI', 'Cloud Computing']);
+const [interests, setInterests] = useState([]);
   const interestOptions = ['Web Development', 'AI', 'Data Science', 'Mathematics', 'IoT', 'Cloud Computing', 'Cybersecurity'];
 
   const [showCourseForm, setShowCourseForm] = useState(false);
@@ -80,6 +80,9 @@ export const TeacherDashboard = () => {
   const [noteText, setNoteText] = useState('');
 
   const [refresh, setRefresh] = useState(0);
+  const [selectedClassworkCourse, setSelectedClassworkCourse] = useState('');
+  const [classworkStudents, setClassworkStudents] = useState([]);
+  const [classworkLoading, setClassworkLoading] = useState(false);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -475,6 +478,30 @@ const handleSelectStudent = (student) => {
       setInterests([...interests, interest]);
     }
   };
+    const loadClassworkStudents = async (courseId) => {
+    if (!courseId) {
+      setClassworkStudents([]);
+      return;
+    }
+    setClassworkLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:5000/api/enrollments/course/${courseId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setClassworkStudents(data);
+      } else {
+        setClassworkStudents([]);
+      }
+    } catch (error) {
+      console.error("Error loading classwork students:", error);
+      setClassworkStudents([]);
+    } finally {
+      setClassworkLoading(false);
+    }
+  };
 
  const isMyMessage = (msg) => {
   const senderId = msg.sender?._id || msg.sender;
@@ -532,116 +559,315 @@ const handleSelectStudent = (student) => {
           <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
 
             {/* ========== 1. PROFILE ========== */}
-            {activeTab === 'profile' && (
-              <div className={`max-w-3xl mx-auto p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Profile</h2>
-                  {!isEditingProfile ? (
-                    <button onClick={() => setIsEditingProfile(true)} className="flex items-center gap-2 text-blue-500 hover:text-blue-600 font-medium text-sm">
-                      <Edit3 size={16} /> Edit Profile
-                    </button>
-                  ) : (
-                    <button onClick={() => setIsEditingProfile(false)} className="flex items-center gap-2 text-gray-500 hover:text-gray-600 font-medium text-sm">
-                      <X size={16} /> Cancel
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-8">
-                  {/* Avatar */}
-                  <div className="flex flex-col items-center gap-3">
-                    <div className={`w-28 h-28 rounded-full flex items-center justify-center text-3xl font-bold ${darkMode ? 'bg-blue-900/40 text-blue-400 border-2 border-blue-700' : 'bg-blue-100 text-blue-600 border-2 border-blue-200'}`}>
-                      {profileData.full_name?.charAt(0) || 'T'}
-                    </div>
-                    {!isEditingProfile && (
-                      <span className={`text-xs px-3 py-1 rounded-full ${profileData.specialization ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>
-                        {profileData.specialization || 'No Specialization'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Info Fields */}
-                  <div className="flex-1 space-y-4">
-                    {[
-                      { key: 'full_name', label: 'Full Name', icon: User },
-                      { key: 'phone', label: 'Phone', icon: Phone },
-                      { key: 'specialization', label: 'Specialization', icon: Brain },
-                      { key: 'qualifications', label: 'Qualifications', icon: GraduationCap },
-                      { key: 'years_experince', label: 'Years of Experience', icon: Clock },
-                      { key: 'university', label: 'University', icon: GraduationCap },
-                      { key: 'country', label: 'Country', icon: MapPin },
-                      { key: 'linkedin_url', label: 'LinkedIn', icon: Globe },
-                    ].map(({ key, label, icon: Icon }) => (
-                      <div key={key} className={`flex items-start gap-3 p-3 rounded-lg ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                        <Icon size={16} className="mt-2 text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
-                          {isEditingProfile ? (
-                            <input
-                              type={key === 'years_experince' ? 'number' : 'text'}
-                              value={profileData[key] || ''}
-                              onChange={e => setProfileData({ ...profileData, [key]: e.target.value })}
-                              className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-white border-gray-300'}`}
-                            />
-                          ) : (
-                            <p className="text-sm font-medium truncate">{profileData[key] || '—'}</p>
-                          )}
+{activeTab === 'profile' && (
+              <div className="w-full relative">
+                {!isEditingProfile && (
+                  <div className="w-full no-print">
+                    <div className="h-32 md:h-60 w-full bg-gradient-to-r from-black-600 via-primary-600 to-blue-600 relative">
+                        <div className="absolute top-6 right-6">
+                            <button 
+                                onClick={() => setIsEditingProfile(true)}
+                                className="bg-white text-blue-600 hover:bg-gray-50 shadow-lg border border-gray-100 px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 transition-all"
+                            >
+                                <Edit3 size={16} /> Edit Profile
+                            </button>
                         </div>
-                      </div>
-                    ))}
-
-                    {/* Bio */}
-                    <div className={`flex items-start gap-3 p-3 rounded-lg ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                      <FileText size={16} className="mt-2 text-gray-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Bio</label>
-                        {isEditingProfile ? (
-                          <textarea
-                            rows={3}
-                            value={profileData.bio || ''}
-                            onChange={e => setProfileData({ ...profileData, bio: e.target.value })}
-                            className={`w-full px-3 py-2 rounded-lg border text-sm ${darkMode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-white border-gray-300'}`}
-                          />
-                        ) : (
-                          <p className="text-sm">{profileData.bio || '—'}</p>
-                        )}
-                      </div>
+                        <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none">
+                            <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white blur-3xl"></div>
+                            <div className="absolute top-20 right-20 w-64 h-64 rounded-full bg-blue-300 blur-3xl"></div>
+                        </div>
                     </div>
+                    
+                    <div className="max-w-7xl mx-auto px-6 relative -mt-20 md:-mt-24 z-10 pb-12">
+                        <div className="flex flex-col md:flex-row items-end md:items-end gap-6 mb-8">
+                            <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-8 border-white dark:border-slate-900 bg-gray-200 dark:bg-slate-800 shadow-2xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                                <User size={80} className="text-gray-400 dark:text-slate-600"/>
+                            </div>
+                            
+                            <div className="flex-1 mb-2 text-center md:text-left">
+                                <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{profileData.full_name}</h2>
+                                <p className="text-xl text-primary-600 dark:text-primary-400 font-medium mt-1">{profileData.specialization}</p>
+                                <div className="flex flex-col md:flex-row items-center gap-4 mt-3 text-gray-600 dark:text-slate-400 text-sm">
+                                    <span className="flex items-center gap-1"><MapPin size={16} className="text-primary-500"/> {profileData.university}, {profileData.country}</span>
+                                    <span className="hidden md:inline-block w-1 h-1 bg-gray-400 rounded-full"></span>
+                                    <span className="flex items-center gap-1"><Calendar size={16} className="text-primary-500"/> {profileData.qualifications}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="hidden md:flex gap-4 mb-4">
+                                <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]">
+                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{courses.length}</p>
+                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Courses</p>
+                                </div>
+                                <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]">
+                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{interests.length}</p>
+                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Interests</p>
+                                </div>
+                            </div>
+                        </div>
 
-                    {/* Interests */}
-                    <div className={`p-3 rounded-lg ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                      <label className="block text-xs font-medium text-gray-400 mb-2">Interests</label>
-                      <div className="flex flex-wrap gap-2">
-                        {interestOptions.map(interest => (
-                          <button
-                            key={interest}
-                            type="button"
-                            onClick={() => isEditingProfile && handleInterestToggle(interest)}
-                            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${interests.includes(interest)
-                                ? 'bg-blue-600 text-white border-blue-600'
-                                : darkMode
-                                  ? 'bg-slate-600 text-slate-300 border-slate-500'
-                                  : 'bg-white text-gray-600 border-gray-300'
-                              } ${!isEditingProfile ? 'cursor-default' : 'cursor-pointer'}`}
-                          >
-                            {interest}
-                          </button>
-                        ))}
-                      </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-2 space-y-8">
+                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                        <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20}/></div>
+                                        About Me
+                                    </h3>
+                                    <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.bio || "No bio added yet."}</p>
+                                </section>
+
+                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                                        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"><GraduationCap size={20}/></div>
+                                        Education & Details
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">University</p>
+                                            <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.university}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Qualifications</p>
+                                            <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.qualifications}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Years of Experience</p>
+                                            <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.years_experince}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Graduation Year</p>
+                                            <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.gradYear}</p>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <div className="space-y-8">
+                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6">Contact Information</h3>
+                                    <div className="space-y-6">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"><Mail size={20}/></div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-bold uppercase">Email</p>
+                                                <p className="text-slate-700 dark:text-slate-300 font-medium">{user?.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"><Phone size={20}/></div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-bold uppercase">Phone</p>
+                                                <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.phone}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400"><Globe size={20}/></div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-bold uppercase">LinkedIn</p>
+                                                <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.linkedin_url}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"><MapPin size={20}/></div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-bold uppercase">Country</p>
+                                                <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.country}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Brain size={18} className="text-primary-500"/> Interests</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {interests.map(interest => (
+                                            <span key={interest} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300 border border-primary-100 dark:border-primary-800">
+                                                {interest}
+                                            </span>
+                                        ))}
+                                        {interests.length === 0 && <p className="text-sm text-gray-400 italic">No interests selected yet.</p>}
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
                     </div>
-
-                    {isEditingProfile && (
-                      <div className="pt-4 flex justify-end">
-                        <Button onClick={handleSaveProfile} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg flex items-center gap-2">
-                          <Save size={16} /> Save Changes
-                        </Button>
-                      </div>
-                    )}
                   </div>
-                </div>
+                )}
+
+                {/* === EDIT MODE === */}
+                {isEditingProfile && (
+                  <div className="max-w-6xl mx-auto px-6 py-8 no-print">
+                    <div className={`rounded-3xl shadow-2xl overflow-hidden border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className="p-8 md:p-10">
+                            <div className="flex items-center justify-between mb-10 border-b border-gray-100 dark:border-slate-700 pb-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Edit Profile</h2>
+                                    <p className="text-sm text-gray-500 mt-1">Update your personal information and preferences.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button 
+                                        onClick={() => setIsEditingProfile(false)}
+                                        className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 flex items-center gap-2 transition-colors"
+                                    >
+                                        <X size={18} /> Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleSaveProfile}
+                                        className="px-5 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl flex items-center gap-2 shadow-lg shadow-primary-500/30 transition-colors"
+                                    >
+                                        <Save size={18} /> Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                                <div className="space-y-8">
+                                    <div className="text-center">
+                                        <div className="w-32 h-32 mx-auto rounded-full bg-gray-100 dark:bg-slate-700 border-4 border-white dark:border-slate-800 shadow-md flex items-center justify-center mb-4">
+                                            <User size={50} className="text-gray-400"/>
+                                        </div>
+                                        <button className="text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center justify-center gap-1">
+                                            <Camera size={16}/> Change Photo
+                                        </button>
+                                    </div>
+
+                                    <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-100'}`}>
+                                        <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white"><Brain size={18} className="text-primary-600"/> My Interests</h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            {interestOptions.map(interest => (
+                                                <button 
+                                                    key={interest}
+                                                    onClick={() => handleInterestToggle(interest)}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                                                        interests.includes(interest) 
+                                                        ? 'bg-primary-600 text-white border-primary-600 shadow-md' 
+                                                        : 'bg-white dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 hover:border-primary-600 hover:text-primary-600'
+                                                    }`}
+                                                >
+                                                    {interest}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-2 space-y-8">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Personal Information</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                                                <input 
+                                                  value={profileData.full_name} 
+                                                  onChange={(e) => setProfileData({...profileData, full_name: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label>
+                                                <input 
+                                                  value={profileData.phone} 
+                                                  onChange={(e) => setProfileData({...profileData, phone: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date of Birth</label>
+                                                <input 
+                                                  type="date" 
+                                                  value={profileData.dob} 
+                                                  onChange={(e) => setProfileData({...profileData, dob: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country</label>
+                                                <select 
+                                                  value={profileData.country} 
+                                                  onChange={(e) => setProfileData({...profileData, country: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
+                                                >
+                                                    <option value="">Select Country</option>
+                                                    <option>Jordan</option><option>UAE</option><option>Saudi Arabia</option><option>USA</option>
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn URL</label>
+                                                <input 
+                                                  value={profileData.linkedin_url} 
+                                                  onChange={(e) => setProfileData({...profileData, linkedin_url: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Education & Professional</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">University / Institution</label>
+                                                <input 
+                                                  value={profileData.university} 
+                                                  onChange={(e) => setProfileData({...profileData, university: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Specialization</label>
+                                                <input 
+                                                  value={profileData.specialization} 
+                                                  onChange={(e) => setProfileData({...profileData, specialization: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Qualifications</label>
+                                                <input 
+                                                  value={profileData.qualifications} 
+                                                  onChange={(e) => setProfileData({...profileData, qualifications: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Years of Experience</label>
+                                                <input 
+                                                  type="number" 
+                                                  value={profileData.years_experince} 
+                                                  onChange={(e) => setProfileData({...profileData, years_experince: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Graduation Year</label>
+                                                <input 
+                                                  type="number" 
+                                                  value={profileData.gradYear} 
+                                                  onChange={(e) => setProfileData({...profileData, gradYear: e.target.value})} 
+                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">About Me</h4>
+                                        <textarea 
+                                          rows="4" 
+                                          value={profileData.bio} 
+                                          onChange={(e) => setProfileData({...profileData, bio: e.target.value})} 
+                                          className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
-
             {/* ========== 2. OVERVIEW ========== */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
@@ -986,15 +1212,7 @@ const handleSelectStudent = (student) => {
                 </div>
                 {selectedCourse ? (
                   <div className="space-y-8">
-                    <div>
-                      <h3 className="font-bold mb-4"><Users size={18} className="inline me-2" />Enrolled Students</h3>
-                      {students.length > 0 ? students.map(s => (
-                        <div key={s._id || s.id} className={`flex items-center justify-between p-3 mb-2 rounded-lg ${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
-                          <span>{s.name || s.full_name || 'Student'}</span>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Active</span>
-                        </div>
-                      )) : <p className="text-gray-400">No students enrolled yet.</p>}
-                    </div>
+                   
                     <form onSubmit={handleAddAssignment} className={`p-4 rounded-lg border ${darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
                       <h3 className="font-bold mb-4"><FileText size={18} className="inline me-2" />Assignments</h3>
                       <div className="grid md:grid-cols-2 gap-4 mb-2">

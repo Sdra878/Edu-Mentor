@@ -1,19 +1,240 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  GraduationCap, Briefcase, Users, 
-  Globe, Cpu, Palette, 
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Float, MeshReflectorMaterial } from '@react-three/drei';
+import * as THREE from 'three';
+import {
+  GraduationCap, Briefcase, Users,
+  Globe, Cpu, Palette,
   TrendingUp, ArrowRight, CheckCircle, PlayCircle,
   Code, Award, Building2, UserPlus, BarChart, Target,
   Facebook, Twitter, Instagram, Calendar, Link as LinkIcon, PlusCircle
 } from 'lucide-react';
 import './LandingPage.css';
 
+/* ============================================
+   3D PEDESTAL SCENE — Blue & Purple Theme
+   ============================================ */
+
+function NeonEdges({ hovered, geometry }) {
+  const ref = useRef();
+  useFrame(() => {
+    if (ref.current) {
+      const target = hovered ? 1.0 : 0.4;
+      ref.current.material.opacity = THREE.MathUtils.lerp(
+        ref.current.material.opacity, target, 0.06
+      );
+    }
+  });
+  return (
+    <lineSegments ref={ref} position={[0, 0.5, 0]}>
+      <edgesGeometry args={[geometry]} />
+      <lineBasicMaterial color="#7C3AED" transparent opacity={0.4} />
+    </lineSegments>
+  );
+}
+
+function HologramModel({ modelIndex, hovered }) {
+  const ref = useRef();
+  const colors = ['#3B82F6', '#A855F7', '#6366F1'];
+  const color = colors[modelIndex];
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y += 0.008;
+      ref.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.5) * 0.15;
+    }
+  });
+
+  const geometry = useMemo(() => {
+    if (modelIndex === 0) return new THREE.BoxGeometry(1.1, 1.1, 1.1);
+    if (modelIndex === 1) return new THREE.SphereGeometry(0.65, 32, 32);
+    return new THREE.TorusKnotGeometry(0.45, 0.18, 64, 16);
+  }, [modelIndex]);
+
+  return (
+    <Float speed={2} rotationIntensity={0} floatIntensity={0.5} floatingRange={[-0.08, 0.08]}>
+      <mesh ref={ref} position={[0, 0.5, 0]} geometry={geometry}>
+        <meshPhysicalMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={hovered ? 1.5 : 0.5}
+          transparent
+          opacity={0.8}
+          roughness={0.05}
+          metalness={0.95}
+          wireframe={modelIndex === 2}
+        />
+      </mesh>
+      <mesh position={[0, 0.5, 0]} geometry={geometry} scale={1.25}>
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={hovered ? 0.07 : 0.02}
+          side={THREE.BackSide}
+        />
+      </mesh>
+    </Float>
+  );
+}
+
+function FloatingParticles() {
+  const ref = useRef();
+  const count = 80;
+  const positions = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 18;
+      pos[i * 3 + 1] = Math.random() * 10 - 3;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 18;
+    }
+    return pos;
+  }, []);
+
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geo;
+  }, [positions]);
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y = state.clock.elapsedTime * 0.015;
+      const arr = ref.current.geometry.attributes.position.array;
+      for (let i = 0; i < count; i++) {
+        arr[i * 3 + 1] += Math.sin(state.clock.elapsedTime + i) * 0.0008;
+      }
+      ref.current.geometry.attributes.position.needsUpdate = true;
+    }
+  });
+
+  return (
+    <points ref={ref} geometry={geometry}>
+      <pointsMaterial
+        size={0.04}
+        color="#8B5CF6"
+        transparent
+        opacity={0.5}
+        sizeAttenuation
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+function PedestalScene() {
+  const [hovered, setHovered] = useState(false);
+  const [modelIndex, setModelIndex] = useState(0);
+  const { gl } = useThree();
+  const baseRingRef1 = useRef();
+  const baseRingRef2 = useRef();
+  const boxGeo = useMemo(() => new THREE.BoxGeometry(2.5, 3, 2.5), []);
+
+  useEffect(() => {
+    gl.domElement.style.cursor = hovered ? 'pointer' : 'default';
+  }, [hovered, gl]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    if (baseRingRef1.current) {
+      baseRingRef1.current.material.opacity =
+        (hovered ? 0.85 : 0.35) + Math.sin(t * 2) * 0.1;
+    }
+    if (baseRingRef2.current) {
+      baseRingRef2.current.material.opacity =
+        (hovered ? 0.7 : 0.2) + Math.cos(t * 1.5) * 0.08;
+    }
+  });
+
+  return (
+    <>
+      <ambientLight intensity={0.15} />
+      <pointLight position={[5, 7, 5]} intensity={2.5} color="#3B82F6" distance={20} />
+      <pointLight position={[-5, 7, -5]} intensity={2.5} color="#A855F7" distance={20} />
+      <spotLight position={[0, 10, 2]} intensity={4} angle={0.35} penumbra={1} color="#4F46E5" />
+      <pointLight position={[0, 1.5, 0]} intensity={hovered ? 2 : 0.6} color="#8B5CF6" distance={6} />
+
+      {/* Reflective Floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
+        <planeGeometry args={[50, 50]} />
+        <MeshReflectorMaterial
+          blur={[300, 80]}
+          resolution={512}
+          mixBlur={1}
+          mixStrength={25}
+          roughness={0.85}
+          depthScale={1.2}
+          minDepthThreshold={0.4}
+          maxDepthThreshold={1.4}
+          color="#06060f"
+          metalness={0.5}
+        />
+      </mesh>
+
+      {/* Hex Base — matte black */}
+      <mesh position={[0, -1.2, 0]}>
+        <cylinderGeometry args={[2, 2.3, 0.3, 6]} />
+        <meshStandardMaterial color="#080808" roughness={0.95} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, -1.35, 0]}>
+        <cylinderGeometry args={[2.3, 2.4, 0.05, 6]} />
+        <meshStandardMaterial color="#0f0f0f" roughness={0.8} metalness={0.2} />
+      </mesh>
+
+      {/* Neon ring 1 — Blue */}
+      <mesh ref={baseRingRef1} position={[0, -1.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.9, 2.08, 6]} />
+        <meshBasicMaterial color="#3B82F6" transparent opacity={0.35} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Neon ring 2 — Purple */}
+      <mesh ref={baseRingRef2} position={[0, -1.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.6, 1.72, 6]} />
+        <meshBasicMaterial color="#A855F7" transparent opacity={0.2} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Glass Frame + Neon Edges + Hologram */}
+      <group
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+        onPointerOut={() => setHovered(false)}
+        onClick={(e) => { e.stopPropagation(); setModelIndex((prev) => (prev + 1) % 3); }}
+      >
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[2.5, 3, 2.5]} />
+          <meshPhysicalMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.03}
+            roughness={0.05}
+            metalness={0}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <NeonEdges hovered={hovered} geometry={boxGeo} />
+        <HologramModel modelIndex={modelIndex} hovered={hovered} />
+      </group>
+
+      <FloatingParticles />
+
+      <OrbitControls
+        autoRotate
+        autoRotateSpeed={0.4}
+        enableZoom={false}
+        enablePan={false}
+        maxPolarAngle={Math.PI / 2.1}
+        minPolarAngle={Math.PI / 4}
+      />
+    </>
+  );
+}
+
+/* ============================================
+   MAIN LANDING PAGE
+   ============================================ */
+
 export const LandingPage = () => {
-  // Dark Mode Fixed (True) for best visual
   const [darkMode] = useState(true);
-  
+
   useEffect(() => {
     document.documentElement.classList.add('dark');
     document.body.style.backgroundColor = '#020617';
@@ -28,7 +249,7 @@ export const LandingPage = () => {
       try {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        
+
         const res = await fetch('http://localhost:5000/api/workshops', { headers });
         if (res.ok) {
           const data = await res.json();
@@ -61,7 +282,7 @@ export const LandingPage = () => {
       const data = await res.json();
       if (res.ok) {
         alert("Joined successfully!");
-        setWorkshops(prev => prev.map(ws => 
+        setWorkshops(prev => prev.map(ws =>
           ws._id === workshopId ? { ...ws, attendees: [...(ws.attendees || []), 'new_user'] } : ws
         ));
       } else {
@@ -73,161 +294,10 @@ export const LandingPage = () => {
     }
   };
 
-  // === 3D VOXEL CUBE LOGIC (Background) ===
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let width, height;
-    let animationFrameId;
-
-    const resize = () => {
-      width = canvas.parentElement.offsetWidth;
-      height = canvas.parentElement.offsetHeight;
-      canvas.width = width;
-      canvas.height = height;
-    };
-    window.addEventListener('resize', resize);
-    resize();
-
-    let angleX = 0;
-    let angleY = 0;
-
-    // Define vertices for a single small cube (unit cube)
-    const unitVertices = [
-      {x: -1, y: -1, z: -1}, {x: 1, y: -1, z: -1}, {x: 1, y: 1, z: -1}, {x: -1, y: 1, z: -1},
-      {x: -1, y: -1, z: 1},  {x: 1, y: -1, z: 1},  {x: 1, y: 1, z: 1},  {x: -1, y: 1, z: 1}
-    ];
-    const unitEdges = [
-      [0,1], [1,2], [2,3], [3,0], // Back face
-      [4,5], [5,6], [6,7], [7,4], // Front face
-      [0,4], [1,5], [2,6], [3,7]  // Connecting lines
-    ];
-
-    const draw = () => {
-      ctx.clearRect(0, 0, width, height);
-      
-      const cx = width / 2;
-      const cy = height / 2;
-      const baseSize = Math.min(width, height) * 0.25; // Overall size of the big cube structure
-
-      // Colors matching the "Tech" image + Project theme
-      const strokeGradient = ctx.createLinearGradient(0, 0, width, height);
-      strokeGradient.addColorStop(0, 'rgba(59, 130, 246, 1)'); // Blue
-      strokeGradient.addColorStop(1, 'rgba(168, 85, 247, 1)'); // Purple
-
-      const fillGradient = ctx.createLinearGradient(0, 0, width, height);
-      fillGradient.addColorStop(0, 'rgba(59, 130, 246, 0.05)'); 
-      fillGradient.addColorStop(1, 'rgba(168, 85, 247, 0.05)');
-
-      ctx.strokeStyle = strokeGradient;
-      ctx.fillStyle = fillGradient;
-      ctx.lineWidth = 1;
-      
-      // Glow
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(59, 130, 246, 0.4)';
-
-      angleX += 0.004;
-      angleY += 0.006;
-
-      let drawList = [];
-
-      // Generate Grid of Cubes (3x3x3)
-      const gridSize = 1.5; // Distance between small cubes
-      const smallCubeScale = 0.35; // Size of individual cube
-
-      for(let gx = -1; gx <= 1; gx++) {
-        for(let gy = -1; gy <= 1; gy++) {
-          for(let gz = -1; gz <= 1; gz++) {
-            
-            // Make it "Tech/Hollow" - Skip the absolute center cube
-            if (gx === 0 && gy === 0 && gz === 0) continue;
-            
-            // Optional: Skip random inner ones to look more complex/structural
-            if (Math.abs(gx) === 1 && Math.abs(gy) === 1 && Math.abs(gz) === 0) continue;
-
-            const offsetX = gx * gridSize;
-            const offsetY = gy * gridSize;
-            const offsetZ = gz * gridSize;
-
-            let projectedPoints = [];
-            let avgZ = 0;
-
-            unitVertices.forEach(v => {
-              // Scale small cube
-              let x = v.x * smallCubeScale + offsetX;
-              let y = v.y * smallCubeScale + offsetY;
-              let z = v.z * smallCubeScale + offsetZ;
-
-              // Rotate X
-              let y1 = y * Math.cos(angleX) - z * Math.sin(angleX);
-              let z1 = y * Math.sin(angleX) + z * Math.cos(angleX);
-
-              // Rotate Y
-              let x2 = x * Math.cos(angleY) - z1 * Math.sin(angleY);
-              let z2 = x * Math.sin(angleY) + z1 * Math.cos(angleY);
-
-              // Perspective
-              let scale = 2.5 / (3 - z2); // Adjusted perspective for depth
-              let px = x2 * baseSize * scale + cx;
-              let py = y1 * baseSize * scale + cy;
-
-              projectedPoints.push({ x: px, y: py });
-              avgZ += z2;
-            });
-
-            avgZ /= 8;
-
-            // Add to draw list
-            drawList.push({
-              z: avgZ,
-              points: projectedPoints
-            });
-          }
-        }
-      }
-
-      // Sort by depth (Painter's Algorithm) - Draw back cubes first
-      drawList.sort((a, b) => a.z - b.z);
-
-      // Draw all cubes
-      drawList.forEach(item => {
-        ctx.beginPath();
-        // Draw Edges
-        unitEdges.forEach(edge => {
-          const p1 = item.points[edge[0]];
-          const p2 = item.points[edge[1]];
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-        });
-        ctx.stroke();
-
-        // Draw Semi-transparent Fill for volume effect
-        ctx.beginPath();
-        ctx.moveTo(item.points[0].x, item.points[0].y);
-        // Simple face filling logic (just drawing a path around some faces for effect)
-        // For simplicity and performance in 2D canvas, we just rely on edges and a very subtle fill 
-        // but here we can fill the back faces to create depth.
-        ctx.fill();
-      });
-
-      animationFrameId = requestAnimationFrame(draw);
-    };
-
-    draw();
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
   return (
     <div className="landing-wrapper dark">
       <div className="bg-slate-950 min-h-screen text-white transition-colors duration-500 font-sans">
-        
+
         {/* Header / Navbar */}
         <header className="fixed w-full top-0 z-50 backdrop-blur-md bg-black/30 border-b border-white/10 transition-all duration-300">
           <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
@@ -260,30 +330,36 @@ export const LandingPage = () => {
         </header>
 
         {/* ========================================== */}
-        {/* ========== HERO SECTION (BOTTOM LEFT) ===== */}
+        {/* ========== HERO SECTION ================== */}
         {/* ========================================== */}
         <section id="home" className="relative pt-32 pb-20 px-6 overflow-hidden min-h-[90vh] flex items-end">
-          
-          {/* FULL BACKGROUND VOXEL CUBE */}
-          <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none opacity-90">
-            <canvas ref={canvasRef} className="w-full h-full" />
+
+          {/* 3D PEDESTAL SCENE (replaces voxel canvas) */}
+          <div className="absolute inset-0 z-0">
+            <Canvas
+              camera={{ position: [0, 2, 6], fov: 45 }}
+              gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
+              dpr={[1, 2]}
+            >
+              <PedestalScene />
+            </Canvas>
           </div>
-          
-          {/* Vignette/Overlay for depth */}
-          <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/80 pointer-events-none"></div>
+
+          {/* Vignette — lighter in center so 3D is visible */}
+          <div className="absolute inset-0 z-[1] bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 pointer-events-none"></div>
 
           {/* CONTENT: BOTTOM LEFT */}
-          <div className="max-w-7xl mx-auto w-full relative z-10 text-left pb-16">
-            <motion.div 
-              initial={{ opacity: 0, x: -50 }} 
-              animate={{ opacity: 1, x: 0 }} 
+          <div className="max-w-7xl mx-auto w-full relative z-10 text-left pb-16 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 1, delay: 0.2 }}
+              className="pointer-events-auto max-w-md"
             >
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-4">
                 The Talent Ecosystem
               </div>
 
-              {/* SMALL TITLE */}
               <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-4 leading-tight text-white drop-shadow-lg">
                 Connecting <br />
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400">
@@ -291,11 +367,10 @@ export const LandingPage = () => {
                 </span>
               </h1>
 
-              {/* SMALL PARAGRAPH */}
               <p className="text-xs md:text-sm text-gray-400 max-w-md leading-relaxed font-light mb-6 drop-shadow-md">
                 Bridging the gap between ambitious students, expert mentors, and top companies through a seamless tech ecosystem.
               </p>
-              
+
               <div className="h-1 w-12 bg-blue-500 rounded-full"></div>
             </motion.div>
           </div>
@@ -310,8 +385,7 @@ export const LandingPage = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* For Students */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -10 }}
                 className="p-8 rounded-3xl bg-gradient-to-b from-slate-800 to-slate-900 border border-blue-500/20 relative overflow-hidden group"
               >
@@ -326,13 +400,12 @@ export const LandingPage = () => {
                   Don't just learn. Build a professional portfolio, get verified skills, and connect directly with hiring companies.
                 </p>
                 <ul className="space-y-3 text-sm text-gray-300">
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-blue-500"/> Career-Ready Skills</li>
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-blue-500"/> Direct Job Access</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-blue-500" /> Career-Ready Skills</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-blue-500" /> Direct Job Access</li>
                 </ul>
               </motion.div>
 
-              {/* For Mentors */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -10 }}
                 className="p-8 rounded-3xl bg-gradient-to-b from-slate-800 to-slate-900 border border-purple-500/20 relative overflow-hidden group"
               >
@@ -347,13 +420,12 @@ export const LandingPage = () => {
                   Share your expertise. Reach students who need your guidance and build a recognized professional brand.
                 </p>
                 <ul className="space-y-3 text-sm text-gray-300">
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-purple-500"/> Monetize Expertise</li>
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-purple-500"/> Build Your Brand</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-purple-500" /> Monetize Expertise</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-purple-500" /> Build Your Brand</li>
                 </ul>
               </motion.div>
 
-              {/* For Companies */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -10 }}
                 className="p-8 rounded-3xl bg-gradient-to-b from-slate-800 to-slate-900 border border-cyan-500/20 relative overflow-hidden group"
               >
@@ -368,8 +440,8 @@ export const LandingPage = () => {
                   Hire pre-vetted talent instantly. Stop searching for skills and start recruiting verified graduates.
                 </p>
                 <ul className="space-y-3 text-sm text-gray-300">
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-cyan-500"/> Vetted Talent Pool</li>
-                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-cyan-500"/> Zero Hiring Friction</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-cyan-500" /> Vetted Talent Pool</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={16} className="text-cyan-500" /> Zero Hiring Friction</li>
                 </ul>
               </motion.div>
             </div>
@@ -380,7 +452,7 @@ export const LandingPage = () => {
         <section className="py-24 px-6">
           <div className="max-w-7xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold mb-16 text-center">The Path to Employment</h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
               <div className="hidden md:block absolute top-12 left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 z-0"></div>
 
@@ -454,7 +526,7 @@ export const LandingPage = () => {
         <section id="courses" className="py-20 px-6">
           <div className="max-w-7xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold mb-12 text-center">Featured Programs</h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
                 { title: "AI Engineering Bootcamp", img: "https://picsum.photos/seed/aiagent/600/400", tag: "Top Rated", students: "1.2k" },
@@ -479,7 +551,7 @@ export const LandingPage = () => {
                       <h3 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">{course.title}</h3>
                     </div>
                     <div className="flex items-center justify-between text-sm text-gray-400">
-                      <div className="flex items-center gap-1"><Users size={14}/> {course.students} enrolled</div>
+                      <div className="flex items-center gap-1"><Users size={14} /> {course.students} enrolled</div>
                       <div className="flex items-center gap-1 text-yellow-500"><span>★★★★★</span> 4.8</div>
                     </div>
                   </div>
@@ -516,10 +588,10 @@ export const LandingPage = () => {
                       <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm mb-4">
                         <Calendar size={16} /> {new Date(ws.date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
                       </div>
-                      
+
                       <h3 className="text-xl font-bold text-white mb-2">{ws.title}</h3>
                       <p className="text-gray-400 text-sm mb-6 flex-1 line-clamp-3">{ws.description || "Join us for an exciting and interactive live session!"}</p>
-                      
+
                       <div className="flex items-center gap-4 text-xs text-gray-500 mb-6">
                         {ws.meeting_link && (
                           <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded-md border border-slate-700">
@@ -531,7 +603,7 @@ export const LandingPage = () => {
                         </div>
                       </div>
 
-                      <button 
+                      <button
                         onClick={() => handleJoinWorkshop(ws._id)}
                         className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-cyan-500/20"
                       >
@@ -557,7 +629,7 @@ export const LandingPage = () => {
               <div className="flex items-center gap-2 text-2xl font-bold"><Palette /> DesignHub</div>
             </div>
             <div className="mt-8">
-                <Link to="/partners" className="text-blue-400 text-sm font-medium hover:underline">View all hiring partners &rarr;</Link>
+              <Link to="/partners" className="text-blue-400 text-sm font-medium hover:underline">View all hiring partners &rarr;</Link>
             </div>
           </div>
         </section>
@@ -573,7 +645,7 @@ export const LandingPage = () => {
               <p className="text-gray-400 max-w-sm mb-6">
                 Closing the gap between education and employment. The first platform that rewards learning with real career opportunities.
               </p>
-              
+
               <div className="flex gap-4">
                 <a href="#" className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-blue-600 hover:border-blue-600 transition-all duration-300">
                   <Facebook size={20} />
@@ -586,7 +658,7 @@ export const LandingPage = () => {
                 </a>
               </div>
             </div>
-            
+
             <div>
               <h4 className="text-white font-bold mb-4">Platform</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
@@ -596,7 +668,7 @@ export const LandingPage = () => {
                 <li><a href="#" className="hover:text-blue-400 transition-colors">Pricing</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="text-white font-bold mb-4">For Companies</h4>
               <ul className="space-y-2 text-gray-400 text-sm">
