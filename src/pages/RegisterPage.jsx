@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, UserPlus, Mail, Lock, User, Linkedin, ArrowLeft, GraduationCap, Building, UserCheck, Briefcase } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, Linkedin, ArrowLeft, GraduationCap, Building, UserCheck, Briefcase, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext'; 
 
 const API_URL = 'http://localhost:5000/api/auth';
@@ -19,6 +19,7 @@ export const RegisterPage = () => {
     industry: '',
     email: '',
     password: '',
+    confirmPassword: '', // ✅ إضافة حقل التأكيد
     linkedin_url: ''
   });
   
@@ -30,13 +31,33 @@ export const RegisterPage = () => {
   };
 
   const handleRoleSelect = (role) => {
+    // ✅ إذا جاء من اللاندينج مع ?role=student
+    if (role === 'student' && !selectedRole) {
+      setSelectedRole(role);
+      return;
+    }
     setSelectedRole(role);
     setError('');
   };
 
+  // ✅ قراءة الـ query param من الـ URL
+  useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roleParam = params.get('role');
+    if (roleParam === 'student' || roleParam === 'teacher' || roleParam === 'company') {
+      setSelectedRole(roleParam);
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // ✅ فحص تطابق كلمات المرور
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
 
     if (!formData.email || !formData.password) {
         setError("Email and Password are required");
@@ -226,7 +247,6 @@ export const RegisterPage = () => {
                 </motion.div>
               )}
 
-              {/* AutoComplete="off" added here */}
               <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
                 
                 {/* Dynamic Inputs */}
@@ -238,7 +258,7 @@ export const RegisterPage = () => {
                             <input 
                                 type="text" 
                                 name="name" 
-                                placeholder="e.g. John Doe" 
+                                placeholder="e.x: John Doe" 
                                 value={formData.name} 
                                 onChange={handleChange} 
                                 autoComplete="off"
@@ -258,7 +278,7 @@ export const RegisterPage = () => {
                                 <input 
                                     type="text" 
                                     name="company_name" 
-                                    placeholder="e.g. Tech Solutions Inc." 
+                                    placeholder="e.x: Tech Solutions Inc." 
                                     value={formData.company_name} 
                                     onChange={handleChange} 
                                     autoComplete="off"
@@ -274,7 +294,7 @@ export const RegisterPage = () => {
                                 <input 
                                     type="text" 
                                     name="industry" 
-                                    placeholder="e.g. Software, Finance" 
+                                    placeholder="e.x: Software, Finance" 
                                     value={formData.industry} 
                                     onChange={handleChange} 
                                     autoComplete="off"
@@ -310,13 +330,47 @@ export const RegisterPage = () => {
                         <input 
                             type="password" 
                             name="password" 
-                            placeholder="" 
+                            placeholder="••••••••" 
                             value={formData.password} 
                             onChange={handleChange} 
                             autoComplete="new-password"
                             className="w-full bg-slate-800 border border-slate-600 rounded-xl py-3 pl-12 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" 
                             required 
                         />
+                    </div>
+                </div>
+
+                {/* ✅ حقل Confirm Password الجديد */}
+                <div className="group">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Confirm Password</label>
+                    <div className="relative">
+                        <ShieldCheck className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={18} />
+                        <input 
+                            type="password" 
+                            name="confirmPassword" 
+                            placeholder="••••••••" 
+                            value={formData.confirmPassword} 
+                            onChange={handleChange} 
+                            autoComplete="new-password"
+                            className={`w-full bg-slate-800 border rounded-xl py-3 pl-12 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-1 transition-all ${
+                              formData.confirmPassword && formData.password !== formData.confirmPassword 
+                                ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                                : formData.confirmPassword && formData.password === formData.confirmPassword 
+                                  ? 'border-green-500 focus:border-green-500 focus:ring-green-500' 
+                                  : 'border-slate-600 focus:border-blue-500 focus:ring-blue-500'
+                            }`} 
+                            required 
+                        />
+                        {/* مؤشر بسيط يظهر إذا تطابقت أو لا */}
+                        {formData.confirmPassword && (
+                          <div className="absolute right-4 top-3.5">
+                            {formData.password === formData.confirmPassword ? (
+                              <span className="text-green-400 text-sm font-bold">✓</span>
+                            ) : (
+                              <span className="text-red-400 text-sm font-bold">✗</span>
+                            )}
+                          </div>
+                        )}
                     </div>
                 </div>
 

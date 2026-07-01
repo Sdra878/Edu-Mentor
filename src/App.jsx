@@ -7,7 +7,13 @@ import { StudentDashboard } from './pages/StudentDashboard';
 import { CompanyDashboard } from './pages/CompanyDashboard'; 
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { LandingPage } from './pages/LandingPage';
+import {
+  LandingPage,
+  AllPathsPage,
+  AllPartnersPage,
+  AllCoursesPage,
+  AllWorkshopsPage
+} from './pages/LandingPage';
 
 const RoleBasedRedirect = () => {
   const { user } = useAuth();
@@ -35,6 +41,11 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
+<Route path="/" element={<LandingPage />} />
+<Route path="/all-paths" element={<AllPathsPage />} />
+<Route path="/all-partners" element={<AllPartnersPage />} />
+<Route path="/all-courses" element={<AllCoursesPage />} />
+<Route path="/all-workshops" element={<AllWorkshopsPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>
