@@ -6,7 +6,10 @@ import {
   BookOpen, User, Briefcase, Award, Play, CheckCircle, 
   Upload, Brain, Moon, Sun, Camera, MapPin, 
   GraduationCap, Mail, Calendar, Phone, Globe, FileText, 
-  Edit3, X, Save, Map as MapPinIcon, Search, Plus, ClipboardList, Clock, Download, Printer, Award as Trophy, ShieldCheck, Calendar as CalendarIcon, ArrowLeft, MessageSquare, Send
+  Edit3, X, Save, Map as MapPinIcon, Search, Plus, 
+  ClipboardList, Clock, Download, Printer, Award as Trophy, 
+  ShieldCheck, Calendar as CalendarIcon, ArrowLeft, 
+  MessageSquare, Send, Users    // ✅ أضف Users هنا
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -41,7 +44,8 @@ export const StudentDashboard = () => {
   const [certificateModal, setCertificateModal] = useState(null); 
   
   const [workshops, setWorkshops] = useState([]);
-  const [registeredWorkshops, setRegisteredWorkshops] = useState([]);
+  const [workshopSearch, setWorkshopSearch] = useState('');
+  const [workshopLoading, setWorkshopLoading] = useState(false);
 
   // ✅ رسائل: حالات المراسلة
   const [teachersList, setTeachersList] = useState([]);
@@ -168,10 +172,17 @@ export const StudentDashboard = () => {
             }
         }
 
-        setWorkshops([
-            { id: 1, title: 'Advanced React Patterns', date: '2023-11-15', location: 'Online', capacity: 50, enrolled: 12 },
-            { id: 2, title: 'Cyber Security Basics', date: '2023-11-20', location: 'Room 101', capacity: 30, enrolled: 5 }
-        ]);
+        // ✅ جلب الورشات الحقيقية من الباك إند
+        const wsRes = await fetch('http://localhost:5000/api/workshops', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (wsRes.ok) {
+          const wsData = await wsRes.json();
+          setWorkshops(wsData);
+        } else {
+          console.error("Workshops fetch error:", wsRes.statusText);
+          setWorkshops([]);
+        }
   
         setProfileData({
             name: user?.name || 'Student Name',
@@ -514,12 +525,55 @@ const loadConversation = async (teacherId) => {
       }
   };
 
-  const handleRegisterWorkshop = (workshopId) => {
-      if(registeredWorkshops.includes(workshopId)) return;
-      setRegisteredWorkshops([...registeredWorkshops, workshopId]);
-      setWorkshops(workshops.map(w => w.id === workshopId ? {...w, enrolled: w.enrolled + 1} : w));
-      alert("Registered Successfully!");
+  const handleJoinWorkshop = async (workshopId) => {
+    const token = localStorage.getItem('token');
+    if (!token) return alert("Please login first");
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/workshops/join/${workshopId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        // ✅ حدّث الـ state محلياً عشان الزر يتغير فوراً
+        setWorkshops(prev =>
+          prev.map(ws => {
+            if (ws._id === workshopId) {
+              return {
+                ...ws,
+                attendees: [...(ws.attendees || []), { _id: user?._id || user?.id }]
+              };
+            }
+            return ws;
+          })
+        );
+        alert("Registered Successfully!");
+      } else {
+        const errData = await res.json().catch(() => ({ message: "Failed to join" }));
+        alert(errData.message || "Failed to register");
+      }
+    } catch (error) {
+      console.error("Join workshop error:", error);
+      alert("Server Error");
+    }
   };
+
+  // ✅ دالة مساعدة: هل الطالب مسجل بالورشة؟
+  const isStudentRegistered = (workshop) => {
+    if (!workshop.attendees || !Array.isArray(workshop.attendees)) return false;
+    const myId = user?._id || user?.id;
+    return workshop.attendees.some(a => {
+      const attendeeId = a?._id || a;
+      return attendeeId?.toString() === myId?.toString();
+    });
+  };
+
+  // ✅ فلترة الورشات حسب البحث
+  const filteredWorkshops = workshops.filter(ws =>
+    ws.title?.toLowerCase().includes(workshopSearch.toLowerCase()) ||
+    ws.description?.toLowerCase().includes(workshopSearch.toLowerCase())
+  );
 
   const handlePrintCertificate = () => {
       window.print();
@@ -929,49 +983,156 @@ const loadConversation = async (teacherId) => {
               </div>
             )}
 
-            {/* --- 2. WORKSHOPS SECTION --- */}
+                        {/* --- 2. WORKSHOPS SECTION --- */}
             {activeTab === 'workshops' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 no-print">
-                    <h2 className={`text-3xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
-                    {workshops.length === 0 ? (
-                        <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
-                            <p className="text-gray-500">No workshops available right now.</p>
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                        <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
+                        
+                        {/* ✅ خانة البحث عن الورشات */}
+                        <div className={`relative w-full md:w-96`}>
+                            <Search size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-slate-400' : 'text-gray-400'}`} />
+                            <input
+                                type="text"
+                                placeholder="Search workshops by title or description..."
+                                value={workshopSearch}
+                                onChange={(e) => setWorkshopSearch(e.target.value)}
+                                className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/40 ${
+                                    darkMode 
+                                        ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' 
+                                        : 'bg-white border-gray-200 text-slate-800 placeholder-gray-400'
+                                }`}
+                            />
+                            {workshopSearch && (
+                                <button 
+                                    onClick={() => setWorkshopSearch('')}
+                                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-slate-400 hover:text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ✅ عدد النتائج */}
+                    {workshopSearch && (
+                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                            Showing {filteredWorkshops.length} result{filteredWorkshops.length !== 1 ? 's' : ''} for "{workshopSearch}"
+                        </p>
+                    )}
+
+                    {filteredWorkshops.length === 0 ? (
+                        <div className={`p-16 text-center rounded-2xl border-2 border-dashed ${
+                            darkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-gray-50 border-gray-200'
+                        }`}>
+                            <CalendarIcon size={48} className={`mx-auto mb-4 ${darkMode ? 'text-slate-600' : 'text-gray-300'}`} />
+                            <p className={`text-lg font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                {workshopSearch ? 'No workshops match your search' : 'No workshops available right now'}
+                            </p>
+                            <p className={`text-sm ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>
+                                {workshopSearch ? 'Try different keywords' : 'Check back later for new workshops'}
+                            </p>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {workshops.map(ws => (
-                                <div key={ws.id} className={`p-6 rounded-xl border shadow-sm hover:border-blue-400 transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                    <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400 font-bold"><CalendarIcon size={16} /> {ws.date}</div>
-                                    <div className="mb-4">
-                                        <h4 className="font-bold text-lg">{ws.title}</h4>
-                                        <p className="text-xs text-gray-500 mb-2 mt-1">{ws.location}</p>
-                                        <p className="text-sm text-gray-400 line-clamp-2 h-10">Join us for an exciting session on {ws.title}.</p>
+                            {filteredWorkshops.map(ws => {
+                                const registered = isStudentRegistered(ws);
+                                const attendeeCount = ws.attendees?.length || 0;
+                                const isOnline = ws.meeting_link ? true : false;
+                                const workshopDate = new Date(ws.date);
+                                const isPast = workshopDate < new Date();
+                                
+                                return (
+                                    <div 
+                                        key={ws._id} 
+                                        className={`p-6 rounded-xl border shadow-sm transition-all duration-300 hover:shadow-md ${
+                                            registered 
+                                                ? 'border-green-400 dark:border-green-500' 
+                                                : 'border-transparent hover:border-blue-400'
+                                        } ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
+                                    >
+                                        {/* ✅ شارة الحالة */}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className={`flex items-center gap-2 text-sm font-bold ${isPast ? 'text-gray-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                                <CalendarIcon size={15} />
+                                                {workshopDate.toLocaleDateString('en-US', { 
+                                                    year: 'numeric', 
+                                                    month: 'short', 
+                                                    day: 'numeric' 
+                                                })}
+                                            </div>
+                                            {registered && (
+                                                <span className="flex items-center gap-1 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2.5 py-1 rounded-full">
+                                                    <CheckCircle size={12} /> Joined
+                                                </span>
+                                            )}
+                                            {isPast && !registered && (
+                                                <span className="text-xs font-medium text-gray-400 bg-gray-100 dark:bg-slate-700 px-2.5 py-1 rounded-full">
+                                                    Expired
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* ✅ العنوان */}
+                                        <h4 className="font-bold text-lg mb-2 leading-tight">{ws.title}</h4>
+                                        
+                                        {/* ✅ الوصف */}
+                                        <p className={`text-sm mb-4 line-clamp-3 min-h-[48px] ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                            {ws.description || 'No description provided.'}
+                                        </p>
+
+                                        {/* ✅ معلومات إضافية */}
+                                        <div className="space-y-2 mb-4">
+                                            <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                <User size={13} className="text-blue-500" />
+                                                <span>By: {ws.teacher?.email || 'Teacher'}</span>
+                                            </div>
+                                            <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                <Globe size={13} className={isOnline ? 'text-green-500' : 'text-gray-400'} />
+                                                <span>{isOnline ? 'Online Meeting' : 'No link provided'}</span>
+                                            </div>
+                                            <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                <Users size={13} className="text-purple-500" />
+                                                <span>{attendeeCount} registered</span>
+                                            </div>
+                                        </div>
+
+                                        {/* ✅ الأزرار */}
+                                        {registered ? (
+                                            <div className="space-y-2">
+                                                {ws.meeting_link && (
+                                                    <a 
+                                                        href={ws.meeting_link} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm"
+                                                    >
+                                                        <Play size={15} /> Join Meeting
+                                                    </a>
+                                                )}
+                                                <button disabled className="w-full py-2 bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-slate-400 rounded-lg font-medium cursor-not-allowed text-sm">
+                                                    <CheckCircle size={15} className="inline mr-1" /> Already Registered
+                                                </button>
+                                            </div>
+                                        ) : isPast ? (
+                                            <button disabled className="w-full py-2.5 bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500 rounded-lg font-medium cursor-not-allowed text-sm">
+                                                This workshop has ended
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={() => handleJoinWorkshop(ws._id)}
+                                                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all hover:shadow-lg hover:shadow-blue-500/20 flex items-center justify-center gap-2 text-sm"
+                                            >
+                                                <Plus size={15} /> Register Now
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="flex justify-between items-center text-xs text-gray-400 mb-4">
-                                        <span>Seats: {ws.enrolled} / {ws.capacity}</span>
-                                        <span className={ws.capacity - ws.enrolled <= 5 ? 'text-red-500' : 'text-green-500'}>
-                                            {ws.capacity - ws.enrolled <= 5 ? 'Filling Fast' : 'Available'}
-                                        </span>
-                                    </div>
-                                    {registeredWorkshops.includes(ws.id) ? (
-                                        <button disabled className="w-full py-2 bg-gray-400 text-white rounded-lg font-medium cursor-not-allowed">
-                                            Registered
-                                        </button>
-                                    ) : (
-                                        <button 
-                                            onClick={() => handleRegisterWorkshop(ws.id)}
-                                            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <Plus size={16} /> Register Now
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
             )}
-
             {/* --- 3. COURSES SECTION --- */}
     {/* --- 3. COURSES SECTION --- */}
             {activeTab === 'courses' && (
