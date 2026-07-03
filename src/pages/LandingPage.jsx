@@ -103,128 +103,199 @@ function AutoOrbitControls() {
 /* ═══════════════════════════════════════════
    EDTECH ATOM COMPONENTS
    ═══════════════════════════════════════════ */
-const ORBITS_CONFIG = [
-  { radius: 1.4, color: '#3B82F6', label: 'STUDENTS', speed: 0.3, tilt: [0.3, 0, 0] },
-  { radius: 1.9, color: '#A855F7', label: 'MENTORS', speed: -0.4, tilt: [Math.PI / 3, 0, Math.PI / 6] },
-  { radius: 2.4, color: '#06B6D4', label: 'HIRING', speed: 0.25, tilt: [-Math.PI / 4, Math.PI / 5, 0] },
+/* ═══════════════════════════════════════════════════════════════
+   FLOATING UI CARDS — 3D Background
+   ═══════════════════════════════════════════════════════════════ */
+const UI_CARDS = [
+  { Icon: BookOpen,      label: 'LEARN',   color: '#3B82F6', angle: 0,                 yOff:  0.15 },
+  { Icon: GraduationCap, label: 'CERTIFY', color: '#A855F7', angle: (Math.PI * 2) / 3, yOff: -0.10 },
+  { Icon: Building2,     label: 'HIRE',    color: '#06B6D4', angle: (Math.PI * 4) / 3, yOff:  0.25 },
 ];
 
-function CoreSphere({ hovered }) {
-  const coreRef = useRef();
-  const glassRef = useRef();
-  const pulseRef = useRef();
-  const [pulse, setPulse] = useState(0);
+const ORBIT_RADIUS = 1.6;
+const ORBIT_SPEED  = 0.18;
+
+const _uiPlane = new THREE.PlaneGeometry(1.3, 1.7);
+const _uiEdges = new THREE.EdgesGeometry(_uiPlane);
+const _glowPlane = new THREE.PlaneGeometry(1.34, 1.74);
+const _glowEdges = new THREE.EdgesGeometry(_glowPlane);
+
+function FloatingUICard({ config, index, hovered, onHover }) {
+  const ref       = useRef();
+  const borderRef = useRef();
+  const glowRef   = useRef();
+  const { Icon, label, color, angle: initAngle, yOff } = config;
 
   useFrame((st) => {
+    if (!ref.current) return;
     const t = st.clock.elapsedTime;
-    if (coreRef.current) {
-      const s = 1 + Math.sin(t * 1.5) * 0.05;
-      coreRef.current.scale.setScalar(s);
-      coreRef.current.material.emissiveIntensity = THREE.MathUtils.lerp(
-        coreRef.current.material.emissiveIntensity, hovered ? 2.5 : 1.2, 0.04
-      );
-    }
-    if (glassRef.current) glassRef.current.rotation.y = t * 0.1;
-    if (pulseRef.current && pulse > 0) {
-      pulseRef.current.scale.setScalar(1 + (1 - pulse) * 4);
-      pulseRef.current.material.opacity = pulse * 0.6;
-      setPulse(p => p - 0.02);
-    }
+    const a = initAngle + t * ORBIT_SPEED;
+    const x = Math.cos(a) * ORBIT_RADIUS;
+    const z = Math.sin(a) * ORBIT_RADIUS;
+    const y = yOff + Math.sin(t * 0.5 + index * 2.1) * 0.06;
+    ref.current.position.set(x, y, z);
+
+    const cam = new THREE.Vector3();
+    st.camera.getWorldPosition(cam);
+    ref.current.rotation.y = Math.atan2(cam.x - x, cam.z - z);
+
+    const s = hovered ? 1.14 : 1.0;
+    ref.current.scale.lerp(new THREE.Vector3(s, s, s), 0.06);
+
+    if (borderRef.current)
+      borderRef.current.material.opacity = THREE.MathUtils.lerp(borderRef.current.material.opacity, hovered ? 0.85 : 0.3, 0.05);
+    if (glowRef.current)
+      glowRef.current.material.opacity = THREE.MathUtils.lerp(glowRef.current.material.opacity, hovered ? 0.45 : 0.08, 0.05);
   });
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); setPulse(1); }}>
-      <mesh ref={coreRef}>
-        <sphereGeometry args={[0.45, 32, 32]} />
-        <meshStandardMaterial color="#6366F1" emissive="#6366F1" emissiveIntensity={1.2} />
+    <group
+      ref={ref}
+      onPointerOver={(e) => { e.stopPropagation(); onHover(true); }}
+      onPointerOut={(e)  => { e.stopPropagation(); onHover(false); }}
+    >
+      <mesh geometry={_uiPlane}>
+        <meshPhysicalMaterial color={color} transparent opacity={hovered ? 0.10 : 0.03} roughness={0.05} metalness={0.1} side={THREE.DoubleSide} />
       </mesh>
-      <mesh ref={glassRef}>
-        <sphereGeometry args={[0.55, 32, 32]} />
-        <meshPhysicalMaterial color="#ffffff" transmission={0.85} transparent opacity={0.2} roughness={0} metalness={0.1} thickness={0.5} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh ref={pulseRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.9, 1.0, 32]} />
-        <meshBasicMaterial color="#8B5CF6" transparent opacity={0} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
+      <lineSegments ref={borderRef} geometry={_uiEdges}>
+        <lineBasicMaterial color={color} transparent opacity={0.3} />
+      </lineSegments>
+      <lineSegments ref={glowRef} geometry={_glowEdges}>
+        <lineBasicMaterial color={color} transparent opacity={0.08} />
+      </lineSegments>
 
-function OrbitRing({ config, hovered, onHover }) {
-  const ringRef = useRef();
-  const nodesRef = useRef([]);
-  const groupRef = useRef();
-  const nodeCount = 3;
-  const nodeAngles = useMemo(() => Array.from({ length: nodeCount }, () => Math.random() * Math.PI * 2), []);
-
-  useFrame((st) => {
-    const t = st.clock.elapsedTime;
-    const speedMult = hovered ? 2.0 : 1.0;
-    if (groupRef.current) groupRef.current.rotation.y += config.speed * 0.01 * speedMult;
-    nodesRef.current.forEach((node, i) => {
-      if (!node) return;
-      const angle = nodeAngles[i] + t * config.speed * speedMult;
-      const x = config.radius * Math.cos(angle);
-      const z = config.radius * Math.sin(angle);
-      const pos = new THREE.Vector3(x, 0, z);
-      pos.applyEuler(new THREE.Euler(...config.tilt));
-      node.position.copy(pos);
-    });
-    if (ringRef.current) {
-      ringRef.current.material.opacity = THREE.MathUtils.lerp(ringRef.current.material.opacity, hovered ? 0.6 : 0.25, 0.04);
-    }
-  });
-
-  return (
-    <group ref={groupRef} onPointerOver={e => { e.stopPropagation(); onHover(true); }} onPointerOut={e => { e.stopPropagation(); onHover(false); }}>
-      <mesh ref={ringRef} rotation={config.tilt}>
-        <torusGeometry args={[config.radius, 0.012, 16, 100]} />
-        <meshBasicMaterial color={config.color} transparent opacity={0.25} />
-      </mesh>
-      {Array.from({ length: nodeCount }).map((_, i) => (
-        <mesh key={i} ref={el => { nodesRef.current[i] = el; }}>
-          <sphereGeometry args={[0.05, 12, 12]} />
-          <meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} />
-        </mesh>
-      ))}
-      <Html position={[0, 0, 0]} center transform distanceFactor={6} style={{ pointerEvents: 'none' }}>
+      <Html center transform distanceFactor={5} style={{ pointerEvents: 'none' }}>
         <div style={{
-          position: 'absolute', top: '-20px', fontSize: '7px', fontFamily: 'monospace', letterSpacing: '3px',
-          color: config.color, opacity: hovered ? 0.8 : 0.3, transition: 'opacity 0.4s', whiteSpace: 'nowrap',
-          textShadow: `0 0 8px ${config.color}`,
-          transform: `rotateX(${config.tilt[0] * (180 / Math.PI)}deg) rotateZ(${config.tilt[2] * (180 / Math.PI)}deg)`
-        }}>{config.label}</div>
+          width: '112px',
+          background: hovered ? 'rgba(2,6,23,0.88)' : 'rgba(2,6,23,0.72)',
+          border: `1px solid ${hovered ? color + '66' : color + '22'}`,
+          borderRadius: '10px', overflow: 'hidden',
+          boxShadow: `0 0 ${hovered ? '24' : '10'}px ${color}18, inset 0 1px 0 rgba(255,255,255,0.05)`,
+          transition: 'all 0.35s ease',
+          backdropFilter: 'blur(12px)',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '5px 8px', background: 'rgba(0,0,0,0.35)',
+            borderBottom: `1px solid ${color}11`,
+          }}>
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#ef4444' }} />
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#eab308' }} />
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e' }} />
+            <span style={{ flex: 1, textAlign: 'center', fontSize: '5.5px', color: '#475569', fontFamily: 'monospace', letterSpacing: '1.5px' }}>{label}</span>
+          </div>
+          <div style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'center', filter: `drop-shadow(0 0 10px ${color})` }}>
+            <Icon size={22} color={color} strokeWidth={1.5} />
+          </div>
+          <div style={{ textAlign: 'center', fontSize: '7.5px', letterSpacing: '2.5px', color, fontFamily: 'monospace', marginBottom: '8px', textShadow: `0 0 8px ${color}` }}>{label}</div>
+          <div style={{ height: '1px', margin: '0 8px', background: `linear-gradient(90deg, transparent, ${color}33, transparent)` }} />
+          <div style={{ padding: '8px 10px 6px' }}>
+            <div style={{ height: '2px', background: `${color}18`, borderRadius: '1px', marginBottom: '4px' }} />
+            <div style={{ height: '2px', background: `${color}12`, borderRadius: '1px', width: '72%', marginBottom: '4px' }} />
+            <div style={{ height: '2px', background: `${color}0a`, borderRadius: '1px', width: '48%' }} />
+          </div>
+          <div style={{ padding: '0 10px 8px' }}>
+            <div style={{
+              height: '15px', borderRadius: '4px',
+              background: `linear-gradient(90deg, ${color}30, ${color}18)`,
+              border: `1px solid ${color}25`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '5.5px', color, fontFamily: 'monospace', letterSpacing: '1.5px',
+              textShadow: `0 0 6px ${color}`,
+            }}>OPEN →</div>
+          </div>
+        </div>
       </Html>
     </group>
   );
 }
 
-function EdTechAtom({ onHover }) {
-  const [hoveredRing, setHoveredRing] = useState(-1);
-  const groupRef = useRef();
-  const isAnyHovered = hoveredRing >= 0;
-  useEffect(() => { onHover(isAnyHovered); }, [isAnyHovered, onHover]);
-  useFrame((st) => { if (groupRef.current) groupRef.current.position.y = Math.sin(st.clock.elapsedTime * 0.5) * 0.1; });
+function CenterGlow({ hovered }) {
+  const ref = useRef();
+  const ringRef = useRef();
+  useFrame((st) => {
+    const t = st.clock.elapsedTime;
+    if (ref.current) {
+      ref.current.scale.setScalar(1 + Math.sin(t * 2) * 0.15);
+      ref.current.material.emissiveIntensity = THREE.MathUtils.lerp(ref.current.material.emissiveIntensity, hovered ? 4 : 2, 0.04);
+    }
+    if (ringRef.current) {
+      ringRef.current.rotation.z = t * 0.4;
+      ringRef.current.material.opacity = (hovered ? 0.35 : 0.12) + Math.sin(t * 1.5) * 0.05;
+    }
+  });
   return (
-    <group ref={groupRef}>
-      <CoreSphere hovered={isAnyHovered} />
-      {ORBITS_CONFIG.map((config, i) => (
-        <OrbitRing key={i} config={config} hovered={hoveredRing === i} onHover={(v) => setHoveredRing(v ? i : -1)} />
+    <group position={[0, 0.1, 0]}>
+      <mesh ref={ref}>
+        <sphereGeometry args={[0.07, 16, 16]} />
+        <meshStandardMaterial color="#ffffff" emissive="#6366F1" emissiveIntensity={2} />
+      </mesh>
+      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.15, 0.19, 32]} />
+        <meshBasicMaterial color="#6366F1" transparent opacity={0.12} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
+function OrbitPath() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+      <ringGeometry args={[ORBIT_RADIUS - 0.008, ORBIT_RADIUS + 0.008, 80]} />
+      <meshBasicMaterial color="#6366F1" transparent opacity={0.06} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+function TrailDots() {
+  const refs = useRef([]);
+  useFrame((st) => {
+    const t = st.clock.elapsedTime;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const idx = i * 3 + j;
+        if (!refs.current[idx]) continue;
+        const a = UI_CARDS[i].angle + t * ORBIT_SPEED - j * 0.12;
+        refs.current[idx].position.set(
+          Math.cos(a) * ORBIT_RADIUS,
+          UI_CARDS[i].yOff + Math.sin(t * 0.5 + i * 2.1) * 0.06,
+          Math.sin(a) * ORBIT_RADIUS
+        );
+      }
+    }
+  });
+  return (
+    <group>
+      {Array.from({ length: 9 }).map((_, i) => (
+        <mesh key={i} ref={(el) => { refs.current[i] = el; }}>
+          <sphereGeometry args={[0.018, 8, 8]} />
+          <meshBasicMaterial color="#8B5CF6" transparent opacity={0.5} />
+        </mesh>
       ))}
     </group>
   );
 }
 
 function EdTechAtomScene() {
-  const [hovered, setHovered] = useState(false);
+  const [hoveredCard, setHoveredCard] = useState(-1);
+  const { gl } = useThree();
   const concreteTex = useMemo(() => genConcrete(), []);
+
+  useEffect(() => {
+    gl.domElement.style.cursor = hoveredCard >= 0 ? 'pointer' : 'default';
+  }, [hoveredCard, gl]);
+
+  const handleHover = useCallback((i) => (v) => setHoveredCard(v ? i : -1), []);
+
   return (
     <>
       <ambientLight intensity={0.08} />
-      <pointLight position={[5, 7, 5]} intensity={2} color="#3B82F6" distance={15} />
-      <pointLight position={[-5, 7, -5]} intensity={2} color="#A855F7" distance={15} />
-      <spotLight position={[0, 10, 2]} intensity={3} angle={0.3} penumbra={1} color="#4F46E5" />
-      <pointLight position={[0, 0, 0]} intensity={hovered ? 2.5 : 1} color="#6366F1" distance={6} />
+      <pointLight position={[5, 7, 5]}   intensity={2} color="#3B82F6" distance={18} />
+      <pointLight position={[-5, 7, -5]} intensity={2} color="#A855F7" distance={18} />
+      <spotLight  position={[0, 10, 2]}  intensity={3} angle={0.3} penumbra={1} color="#4F46E5" />
+      <pointLight position={[0, 0.1, 0]} intensity={hoveredCard >= 0 ? 2.2 : 0.8} color="#6366F1" distance={5} />
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
         <planeGeometry args={[10, 10]} />
         <MeshReflectorMaterial blur={[300, 80]} resolution={512} mixBlur={1} mixStrength={15} roughness={0.85} depthScale={1.2} minDepthThreshold={0.4} maxDepthThreshold={1.4} color="#06060f" metalness={0.5} />
@@ -233,11 +304,22 @@ function EdTechAtomScene() {
         <planeGeometry args={[10, 10]} />
         <meshBasicMaterial map={concreteTex} transparent opacity={0.4} depthWrite={false} />
       </mesh>
-      <EdTechAtom onHover={setHovered} />
+
+      <group position={[0, 0.2, 0]}>
+        <CenterGlow hovered={hoveredCard >= 0} />
+        <OrbitPath />
+        <TrailDots />
+        {UI_CARDS.map((cfg, i) => (
+          <FloatingUICard key={i} config={cfg} index={i} hovered={hoveredCard === i} onHover={handleHover(i)} />
+        ))}
+      </group>
+
       <FloatingParticles />
+
       <EffectComposer>
-        <Bloom luminanceThreshold={0.15} luminanceSmoothing={0.9} intensity={0.9} mipmapBlur />
+        <Bloom luminanceThreshold={0.15} luminanceSmoothing={0.9} intensity={0.85} mipmapBlur />
       </EffectComposer>
+
       <AutoOrbitControls />
     </>
   );
@@ -269,9 +351,17 @@ const useStudentGuard = () => {
    Helper: رابط صورة الكورس
    ═══════════════════════════════════════════════════════════════ */
 const getCourseImage = (course) => {
-  if (course.thumbnail) return course.thumbnail.startsWith('http') ? course.thumbnail : `http://localhost:5000${course.thumbnail}`;
-  if (course.image) return course.image.startsWith('http') ? course.image : `http://localhost:5000${course.image}`;
-  return `https://picsum.photos/seed/${course._id || 'course'}/600/400`;
+  const imgFields = ['thumbnail', 'image', 'coverImage', 'courseImage', 'course_image', 'cover_image', 'photo', 'picture', 'img', 'imageUrl', 'image_url', 'thumbnailUrl', 'thumbnail_url'];
+  for (const field of imgFields) {
+    if (course[field]) {
+      const val = course[field];
+      if (val.startsWith('http')) return val;
+      const basePath = 'http://localhost:5000';
+      return val.startsWith('/') ? `${basePath}${val}` : `${basePath}/${val}`;
+    }
+  }
+  const seed = (course.category || course.title || 'course').replace(/\s+/g, '-').toLowerCase();
+  return `https://picsum.photos/seed/${seed}/600/400`;
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -289,13 +379,13 @@ const CourseCard = ({ course, index, onClick }) => (
     <div className="absolute top-4 right-4 z-30 px-2 py-1 rounded-md bg-slate-900/80 backdrop-blur-sm border border-white/10 text-[9px] font-bold uppercase tracking-wider text-blue-300 flex items-center gap-1">
       <GraduationCap size={10} /> Students Only
     </div>
-    <div className="relative h-48 overflow-hidden">
+    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-slate-700 via-blue-900/40 to-slate-800">
       <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors z-10"></div>
       <img
         src={getCourseImage(course)}
         alt={course.title || 'Course'}
         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-        onError={(e) => { e.target.src = `https://picsum.photos/seed/${course._id}/600/400`; }}
+        onError={(e) => { e.target.style.display = 'none'; }}
       />
       {course.category && (
         <span className="absolute top-4 left-4 z-20 px-3 py-1 text-xs font-bold uppercase tracking-wide bg-blue-600 text-white rounded-md">{course.category}</span>
@@ -958,9 +1048,18 @@ export const LandingPage = () => {
 
         {/* ═══ HERO ═══ */}
         <section id="home" className="relative pt-32 pb-20 px-6 overflow-hidden min-h-[90vh] flex items-center">
-          <div className="max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
-            <div className="order-2 md:order-1 text-center md:text-left">
-              <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, delay: 0.2 }} className="max-w-md mx-auto md:mx-0">
+          {/* 3D Full Background */}
+          <div className="absolute inset-0 z-0">
+            <Canvas camera={{ position: [0, 0.5, 6], fov: 40 }} gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }} dpr={[1, 2]}>
+              <EdTechAtomScene />
+            </Canvas>
+            <div className="absolute inset-0 z-[1] bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 pointer-events-none"></div>
+          </div>
+
+          {/* Content */}
+          <div className="max-w-7xl mx-auto w-full relative z-10 pointer-events-none">
+            <div className="max-w-md">
+              <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, delay: 0.2 }} className="pointer-events-auto">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-4">The Talent Ecosystem</div>
                 <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-4 leading-tight text-white drop-shadow-lg">
                   Connecting <br />
@@ -969,15 +1068,6 @@ export const LandingPage = () => {
                 <p className="text-xs md:text-sm text-gray-400 max-w-md leading-relaxed font-light mb-6 drop-shadow-md">Bridging the gap between ambitious students, expert mentors, and top companies through a seamless tech ecosystem.</p>
                 <div className="h-1 w-12 bg-blue-500 rounded-full"></div>
               </motion.div>
-            </div>
-            <div className="order-1 md:order-2 relative flex items-center justify-center h-[400px] md:h-[600px]">
-              <div className="absolute bottom-10 w-48 h-32 bg-blue-600/30 rounded-full blur-[80px] z-0"></div>
-              <div className="absolute bottom-5 left-10 w-40 h-28 bg-purple-600/25 rounded-full blur-[70px] z-0"></div>
-              <div className="w-full h-full relative z-10">
-                <Canvas camera={{ position: [0, 0.5, 6], fov: 40 }} gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }} dpr={[1, 2]}>
-                  <EdTechAtomScene />
-                </Canvas>
-              </div>
             </div>
           </div>
         </section>
