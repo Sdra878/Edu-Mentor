@@ -9,11 +9,11 @@ import {
   Edit3, X, Save, Map as MapPinIcon, Search, Plus, 
   ClipboardList, Clock, Download, Printer, Award as Trophy, 
   ShieldCheck, Calendar as CalendarIcon, ArrowLeft, 
-  MessageSquare, Send, Users    // ✅ أضف Users هنا
+  MessageSquare, Send, Users, LogOut, XCircle
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
@@ -41,30 +41,28 @@ export const StudentDashboard = () => {
   const [examAnswers, setExamAnswers] = useState({});
   const [examResult, setExamResult] = useState(null);
   
-  const [certificateModal, setCertificateModal] = useState(null); 
+ const [certificateModal, setCertificateModal] = useState(null); 
   
   const [workshops, setWorkshops] = useState([]);
   const [workshopSearch, setWorkshopSearch] = useState('');
   const [workshopLoading, setWorkshopLoading] = useState(false);
 
-  // ✅ رسائل: حالات المراسلة
   const [teachersList, setTeachersList] = useState([]);
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
   const chatEndRef = useRef(null);
-    // ✅ AI Chatbot States
+
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [aiMessages, setAiMessages] = useState([{ role: 'bot', text: 'Hi! How can I help you today? 🎓' }]);
   const [aiInput, setAiInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const aiChatEndRef = useRef(null);
-  const WEBHOOK_URL = 'http://localhost:5678/webhook-test/chat'; // ضع رابط الويب هوك هنا
+  const WEBHOOK_URL = 'http://localhost:5678/webhook-test/chat';
 
   useEffect(() => {
     aiChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [aiMessages]);
-
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -87,14 +85,12 @@ export const StudentDashboard = () => {
   const [trainingData, setTrainingData] = useState({ company: '', cv: '' });
   const [testScore, setTestScore] = useState(null);
 
-  // ✅ رسائل: تلقائي اسكرول لآخر رسالة
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
 
-  // ✅ رسائل: استخراج المدرسين من الكورسات المسجلة
   useEffect(() => {
     if (activeEnrollments.length === 0) {
       setTeachersList([]);
@@ -117,7 +113,6 @@ export const StudentDashboard = () => {
     setTeachersList(Array.from(teachersMap.values()));
   }, [activeEnrollments]);
 
-  // === 1. جلب البيانات ===
   useEffect(() => {
     if (!user) return;
     
@@ -172,7 +167,6 @@ export const StudentDashboard = () => {
             }
         }
 
-        // ✅ جلب الورشات الحقيقية من الباك إند
         const wsRes = await fetch('http://localhost:5000/api/workshops', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -185,11 +179,11 @@ export const StudentDashboard = () => {
         }
   
         setProfileData({
-            name: user?.name || 'Student Name',
+                        name: user?.name || user?.email?.split('@')[0] || '',
             bio: '',
             university: '',
             phone: '',
-            country: 'Jordan',
+            country: '',
             level: '',
             gradYear: '',
             dob: ''
@@ -205,35 +199,31 @@ export const StudentDashboard = () => {
     loadData();
   }, [user?.id]);
 
-  // ✅ رسائل: جلب محادثة مع مدرس معيّن
-const loadConversation = async (teacherId) => {
-  if (!teacherId) {
-    setChatMessages([]);
-    return;
-  }
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(`http://localhost:5000/api/messages/conversation/${teacherId}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const msgs = await res.json();
-      setChatMessages(msgs);
-    } else {
+  const loadConversation = async (teacherId) => {
+    if (!teacherId) {
+      setChatMessages([]);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://localhost:5000/api/messages/conversation/${teacherId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        setChatMessages(msgs);
+      } else {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error('Error:', error);
       setChatMessages([]);
     }
-  } catch (error) {
-    console.error('Error:', error);
-    setChatMessages([]);
-  }
-};
+  };
 
-  // ✅ رسائل: إرسال رسالة
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!selectedTeacher) {
-      return alert("Please select a teacher first");
-    }
+    if (!selectedTeacher) return alert("Please select a teacher first");
     if (!messageText.trim()) return;
 
     const token = localStorage.getItem('token');
@@ -264,20 +254,17 @@ const loadConversation = async (teacherId) => {
     }
   };
 
-  // ✅ رسائل: عند اختيار مدرس → حمّل المحادثة
   const handleSelectTeacher = (teacher) => {
     setSelectedTeacher(teacher);
     loadConversation(teacher._id);
   };
 
-  // ✅ رسائل: تحقق إذا الرسالة مني
   const isMyMessage = (msg) => {
     const senderId = msg.sender?._id || msg.sender;
     const myId = user?.id || user?._id;
     return senderId?.toString() === myId?.toString();
   };
 
-    // ✅ AI Chatbot Function
   const sendAiMessage = async () => {
     const text = aiInput.trim();
     if (!text || aiLoading) return;
@@ -298,7 +285,6 @@ const loadConversation = async (teacherId) => {
     setAiLoading(false);
   };
 
-  // === 2. حفظ البروفايل ===
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('token');
     try {
@@ -333,9 +319,7 @@ const loadConversation = async (teacherId) => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
-      if (!res.ok) {
-          throw new Error("Failed to fetch courses");
-      }
+      if (!res.ok) throw new Error("Failed to fetch courses");
 
       const data = await res.json();
       
@@ -373,17 +357,11 @@ const loadConversation = async (teacherId) => {
       });
 
       if (res.ok) {
-        // ✅ أوجد الكورس الكامل من نتائج البحث (اللي فيها الفيديوهات وبيانات الاستاذ)
         const fullCourseData = searchResults.find(c => c._id === courseId);
-        
-        if (!fullCourseData) {
-          alert("Error: Course data lost");
-          return;
-        }
+        if (!fullCourseData) { alert("Error: Course data lost"); return; }
 
-        // ✅ أنشئ عنصر تسجيل يحتوي على بيانات الكورس كاملة (وليس البيانات الفارغة من الباك إند)
         const newEnrollment = {
-          _id: Date.now(), // ID مؤقت للواجهة
+          _id: Date.now(),
           course: fullCourseData 
         };
 
@@ -422,25 +400,19 @@ const loadConversation = async (teacherId) => {
       const formData = new FormData();
       formData.append('companyId', targetCompanyId);
       
-      if (cvFile) {
-          formData.append('cv', cvFile);
-      }
+      if (cvFile) formData.append('cv', cvFile);
 
       const res = await fetch('http://localhost:5000/api/applications/apply', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData 
       });
 
       if (res.ok) {
         const result = await res.json();
         alert("Application Sent Successfully!");
-        
         setTrainingData({ company: '', cv: '' });
         setCvFile(null); 
-        
         setApps([...apps, {
           id: result._id || Date.now(), 
           companyName: targetCompanyId, 
@@ -494,18 +466,13 @@ const loadConversation = async (teacherId) => {
   };
 
   const handleAnswerChange = (questionIndex, optionIndex) => {
-      setExamAnswers({
-          ...examAnswers,
-          [questionIndex]: optionIndex
-      });
+      setExamAnswers({ ...examAnswers, [questionIndex]: optionIndex });
   };
 
   const submitExam = () => {
       let correctCount = 0;
       currentExam.questions.forEach((q, idx) => {
-          if (examAnswers[idx] === q.correctIndex) {
-              correctCount++;
-          }
+          if (examAnswers[idx] === q.correctIndex) correctCount++;
       });
       const score = Math.round((correctCount / currentExam.questions.length) * 100);
       setExamResult({ score, passed: score > 60 });
@@ -514,11 +481,7 @@ const loadConversation = async (teacherId) => {
   const handleFinishCourse = (course) => {
       if (window.confirm("Are you sure you want to mark this course as complete? You will receive a certificate.")) {
           setActiveEnrollments(activeEnrollments.filter(e => e.course._id !== course._id));
-          const newCompletion = {
-              _id: Date.now(),
-              completed_at: new Date(),
-              course: course
-          };
+          const newCompletion = { _id: Date.now(), completed_at: new Date(), course };
           setEnrollments([...enrollments, newCompletion]);
           setCertificateModal(course);
           setSelectedCourse(null);
@@ -536,14 +499,10 @@ const loadConversation = async (teacherId) => {
       });
 
       if (res.ok) {
-        // ✅ حدّث الـ state محلياً عشان الزر يتغير فوراً
         setWorkshops(prev =>
           prev.map(ws => {
             if (ws._id === workshopId) {
-              return {
-                ...ws,
-                attendees: [...(ws.attendees || []), { _id: user?._id || user?.id }]
-              };
+              return { ...ws, attendees: [...(ws.attendees || []), { _id: user?._id || user?.id }] };
             }
             return ws;
           })
@@ -559,7 +518,6 @@ const loadConversation = async (teacherId) => {
     }
   };
 
-  // ✅ دالة مساعدة: هل الطالب مسجل بالورشة؟
   const isStudentRegistered = (workshop) => {
     if (!workshop.attendees || !Array.isArray(workshop.attendees)) return false;
     const myId = user?._id || user?.id;
@@ -569,15 +527,12 @@ const loadConversation = async (teacherId) => {
     });
   };
 
-  // ✅ فلترة الورشات حسب البحث
   const filteredWorkshops = workshops.filter(ws =>
     ws.title?.toLowerCase().includes(workshopSearch.toLowerCase()) ||
     ws.description?.toLowerCase().includes(workshopSearch.toLowerCase())
   );
 
-  const handlePrintCertificate = () => {
-      window.print();
-  };
+  const handlePrintCertificate = () => { window.print(); };
 
   const handleInterestToggle = (interest) => {
     setInterests(interests.includes(interest) ? interests.filter(i => i !== interest) : [...interests, interest]);
@@ -590,13 +545,15 @@ const loadConversation = async (teacherId) => {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to logout?")) {
+      logout();
+    }
+  };
+
   const TabButton = ({ id, label, icon: Icon }) => (
     <button 
-      onClick={() => { 
-        setActiveTab(id); 
-        setIsEditingProfile(false); 
-        setSelectedCourse(null);
-      }} 
+      onClick={() => { setActiveTab(id); setIsEditingProfile(false); setSelectedCourse(null); }} 
       className={`relative flex items-center gap-2 px-6 py-4 font-medium transition-all duration-300 
         ${activeTab === id 
           ? 'text-blue-600 dark:text-blue-400' 
@@ -610,6 +567,7 @@ const loadConversation = async (teacherId) => {
       )}
     </button>
   );
+
   const getVideoUrl = (video) => {
     if (!video) return '';
     if (video.url && video.url.startsWith('http')) return video.url;
@@ -627,32 +585,13 @@ const loadConversation = async (teacherId) => {
       
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          #
-          @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}certificate-print-area, #certificate-print-area * {
-            visibility: visible;
-          }
+          body * { visibility: hidden; }
+          #certificate-print-area, #certificate-print-area * { visibility: visible; }
           #certificate-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            background: white;
-            margin: 0;
-            padding: 0;
-            border: none;
-            box-shadow: none;
+            position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+            z-index: 9999; background: white; margin: 0; padding: 0; border: none; box-shadow: none;
           }
-          .no-print {
-            display: none !important;
-          }
+          .no-print { display: none !important; }
         }
       `}</style>
 
@@ -662,16 +601,26 @@ const loadConversation = async (teacherId) => {
               <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                 Student Portal
               </h1>
+              {/* ✅ 2. اسم الطالب الفعلي */}
               <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">
-                Welcome, {profileData.name || user?.name || 'Student'}
+                Welcome, {user?.name || profileData.name || 'Student'}
               </p>
             </div>
-            <button 
-              onClick={() => setDarkMode(!darkMode)} 
-              className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'}`}
-            >
-              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleLogout} 
+                className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-red-400 hover:bg-red-900/30' : 'bg-gray-200 text-red-500 hover:bg-red-50'}`} 
+                title="Logout"
+              >
+                <LogOut size={20} />
+              </button>
+              <button 
+                onClick={() => setDarkMode(!darkMode)} 
+                className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'}`}
+              >
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+            </div>
         </header>
       </div>
 
@@ -770,7 +719,7 @@ const loadConversation = async (teacherId) => {
                                             <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.university}</p>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Degree Level</p>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Education Level</p>
                                             <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.level}</p>
                                         </div>
                                         <div>
@@ -924,7 +873,11 @@ const loadConversation = async (teacherId) => {
                                                   className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
                                                 >
                                                     <option value="">Select Country</option>
-                                                    <option>Jordan</option><option>UAE</option><option>Saudi Arabia</option><option>USA</option>
+                                                    <option>Jordan</option>
+                                                    <option>Syria</option>
+                                                    <option>UAE</option>
+                                                    <option>Saudi Arabia</option>
+                                                    <option>USA</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -979,18 +932,16 @@ const loadConversation = async (teacherId) => {
                     </div>
                   </div>
                 )}
-
               </div>
             )}
 
-                        {/* --- 2. WORKSHOPS SECTION --- */}
+            {/* --- 2. WORKSHOPS SECTION --- */}
             {activeTab === 'workshops' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 no-print">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                        <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
+                        <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Workshops</h2>
                         
-                        {/* ✅ خانة البحث عن الورشات */}
-                        <div className={`relative w-full md:w-96`}>
+                        <div className="relative w-full md:w-96">
                             <Search size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-slate-400' : 'text-gray-400'}`} />
                             <input
                                 type="text"
@@ -1014,9 +965,8 @@ const loadConversation = async (teacherId) => {
                         </div>
                     </div>
 
-                    {/* ✅ عدد النتائج */}
                     {workshopSearch && (
-                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4 text-left">
                             Showing {filteredWorkshops.length} result{filteredWorkshops.length !== 1 ? 's' : ''} for "{workshopSearch}"
                         </p>
                     )}
@@ -1042,46 +992,37 @@ const loadConversation = async (teacherId) => {
                                 const workshopDate = new Date(ws.date);
                                 const isPast = workshopDate < new Date();
                                 
+                                // ✅ 3. إخفاء الورشات المنتهية بالكامل
+                                if (isPast && !registered) return null;
+                                
                                 return (
                                     <div 
                                         key={ws._id} 
-                                        className={`p-6 rounded-xl border shadow-sm transition-all duration-300 hover:shadow-md ${
+                                        className={`p-6 rounded-xl border shadow-sm transition-all duration-300 hover:shadow-md text-left ${
                                             registered 
                                                 ? 'border-green-400 dark:border-green-500' 
                                                 : 'border-transparent hover:border-blue-400'
                                         } ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
                                     >
-                                        {/* ✅ شارة الحالة */}
                                         <div className="flex items-center justify-between mb-3">
                                             <div className={`flex items-center gap-2 text-sm font-bold ${isPast ? 'text-gray-400' : 'text-blue-600 dark:text-blue-400'}`}>
                                                 <CalendarIcon size={15} />
-                                                {workshopDate.toLocaleDateString('en-US', { 
-                                                    year: 'numeric', 
-                                                    month: 'short', 
-                                                    day: 'numeric' 
-                                                })}
+                                                {workshopDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                                             </div>
                                             {registered && (
                                                 <span className="flex items-center gap-1 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2.5 py-1 rounded-full">
                                                     <CheckCircle size={12} /> Joined
                                                 </span>
                                             )}
-                                            {isPast && !registered && (
-                                                <span className="text-xs font-medium text-gray-400 bg-gray-100 dark:bg-slate-700 px-2.5 py-1 rounded-full">
-                                                    Expired
-                                                </span>
-                                            )}
+                                            {/* ✅ 3. تم شيل "Expired" بالكامل */}
                                         </div>
 
-                                        {/* ✅ العنوان */}
-                                        <h4 className="font-bold text-lg mb-2 leading-tight">{ws.title}</h4>
+                                        <h4 className="font-bold text-lg mb-2 leading-tight text-left">{ws.title}</h4>
                                         
-                                        {/* ✅ الوصف */}
-                                        <p className={`text-sm mb-4 line-clamp-3 min-h-[48px] ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                        <p className={`text-sm mb-4 line-clamp-3 min-h-[48px] text-left ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                                             {ws.description || 'No description provided.'}
                                         </p>
 
-                                        {/* ✅ معلومات إضافية */}
                                         <div className="space-y-2 mb-4">
                                             <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                                                 <User size={13} className="text-blue-500" />
@@ -1097,7 +1038,6 @@ const loadConversation = async (teacherId) => {
                                             </div>
                                         </div>
 
-                                        {/* ✅ الأزرار */}
                                         {registered ? (
                                             <div className="space-y-2">
                                                 {ws.meeting_link && (
@@ -1114,10 +1054,6 @@ const loadConversation = async (teacherId) => {
                                                     <CheckCircle size={15} className="inline mr-1" /> Already Registered
                                                 </button>
                                             </div>
-                                        ) : isPast ? (
-                                            <button disabled className="w-full py-2.5 bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500 rounded-lg font-medium cursor-not-allowed text-sm">
-                                                This workshop has ended
-                                            </button>
                                         ) : (
                                             <button 
                                                 onClick={() => handleJoinWorkshop(ws._id)}
@@ -1133,15 +1069,13 @@ const loadConversation = async (teacherId) => {
                     )}
                 </div>
             )}
+
             {/* --- 3. COURSES SECTION --- */}
-    {/* --- 3. COURSES SECTION --- */}
             {activeTab === 'courses' && (
               <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
-                 
-               {selectedCourse ? (
+                 {selectedCourse ? (
                 <div className={`w-full rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     
-                    {/* رأس الكورس */}
                     <div className={`p-6 border-b ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
                         <button 
                             onClick={() => { setSelectedCourse(null); setCurrentVideoIndex(0); }} 
@@ -1160,7 +1094,6 @@ const loadConversation = async (teacherId) => {
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
                         
-                        {/* مشغل الفيديو */}
                         <div className="lg:col-span-2 p-6">
                             {selectedCourse.videos && selectedCourse.videos.length > 0 ? (
                                 <>
@@ -1207,7 +1140,6 @@ const loadConversation = async (teacherId) => {
                             )}
                         </div>
 
-                        {/* قائمة الفيديوهات الجانبية */}
                         <div className={`border-l p-4 ${darkMode ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-gray-50'}`}>
                             <h4 className={`font-bold mb-4 text-sm uppercase tracking-wider ${darkMode ? 'text-slate-300' : 'text-gray-500'}`}>
                                 Videos ({selectedCourse.videos?.length || 0})
@@ -1239,7 +1171,6 @@ const loadConversation = async (teacherId) => {
                         </div>
                     </div>
 
-                    {/* معلومات الاستاذ */}
                     {selectedCourse.teacher && (
                         <div className={`p-6 border-t ${darkMode ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-gray-50'}`}>
                             <div className="flex items-center gap-4">
@@ -1256,9 +1187,8 @@ const loadConversation = async (teacherId) => {
                 </div>
                 ) : (
                   <>
-                    {/* بحث */}
                     <div className={`p-6 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Find Courses</h2>
+                        <h2 className={`text-2xl font-bold mb-4 text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Find Courses</h2>
                         <div className="flex gap-3">
                             <div className="flex-1 relative">
                                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1277,13 +1207,12 @@ const loadConversation = async (teacherId) => {
                         </div>
                     </div>
 
-                    {/* نتائج البحث */}
                     {searchResults.length > 0 && (
                         <div>
-                            <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Results ({searchResults.length})</h3>
+                            <h3 className={`text-lg font-bold mb-4 text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Results ({searchResults.length})</h3>
                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {searchResults.map(course => (
-                                    <div key={course._id} className={`p-6 rounded-xl border shadow-sm hover:shadow-lg transition-all ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                    <div key={course._id} className={`p-6 rounded-xl border shadow-sm hover:shadow-lg transition-all text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                         {course.videos?.length > 0 && (
                                             <div className="flex items-center gap-1.5 mb-3">
                                                 <Play size={14} className="text-blue-500" />
@@ -1307,9 +1236,8 @@ const loadConversation = async (teacherId) => {
                         </div>
                     )}
 
-                    {/* كورساتي المسجلة */}
                     <div>
-                        <h3 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Enrolled Courses ({activeEnrollments.length})</h3>
+                        <h3 className={`text-xl font-bold mb-4 text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>My Enrolled Courses ({activeEnrollments.length})</h3>
                         {activeEnrollments.length === 0 ? (
                             <div className={`p-12 text-center rounded-xl border-2 border-dashed ${darkMode ? 'border-slate-700' : 'border-gray-300'}`}>
                                 <BookOpen size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-4" />
@@ -1324,7 +1252,7 @@ const loadConversation = async (teacherId) => {
                                         <div
                                             key={enrollment._id || course._id}
                                             onClick={() => { setSelectedCourse(course); setCurrentVideoIndex(0); }}
-                                            className={`p-6 rounded-xl border shadow-sm cursor-pointer hover:shadow-lg transition-all group ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
+                                            className={`p-6 rounded-xl border shadow-sm cursor-pointer hover:shadow-lg transition-all group text-left ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
                                         >
                                             {course.videos?.length > 0 && (
                                                 <div className="flex items-center gap-1.5 mb-3">
@@ -1345,16 +1273,15 @@ const loadConversation = async (teacherId) => {
                         )}
                     </div>
 
-                    {/* كورسات مكتملة */}
                     {enrollments.length > 0 && (
                         <div>
-                            <h3 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Completed ({enrollments.length})</h3>
+                            <h3 className={`text-xl font-bold mb-4 text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Completed ({enrollments.length})</h3>
                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {enrollments.map(enrollment => {
                                     const course = enrollment.course;
                                     if (!course) return null;
                                     return (
-                                        <div key={enrollment._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-green-700/50' : 'bg-white border-green-200'}`}>
+                                        <div key={enrollment._id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-green-700/50' : 'bg-white border-green-200'}`}>
                                             <div className="flex items-center gap-2 mb-3">
                                                 <CheckCircle size={16} className="text-green-500" />
                                                 <span className="text-xs text-green-500 font-semibold">Completed</span>
@@ -1373,9 +1300,11 @@ const loadConversation = async (teacherId) => {
                 )}
               </div>
             )}
+
             {/* --- 4. EXAMS SECTION --- */}
+            {/* ✅ 4. زيّن عاليسار */}
             {activeTab === 'exams' && (
-                <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
+                <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print text-left">
                     {currentExam ? (
                         <div className={`w-full max-w-3xl mx-auto rounded-2xl border shadow-xl overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className={`p-6 border-b ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
@@ -1406,7 +1335,7 @@ const loadConversation = async (teacherId) => {
                             ) : (
                                 <div className="p-6 space-y-6">
                                     {currentExam.questions.map((q, qIdx) => (
-                                        <div key={qIdx} className={`p-5 rounded-xl border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div key={qIdx} className={`p-5 rounded-xl border text-left ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
                                             <p className="font-bold mb-4 text-slate-800 dark:text-white">Q{qIdx + 1}: {q.text}</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 {q.options.map((opt, oIdx) => (
@@ -1438,7 +1367,7 @@ const loadConversation = async (teacherId) => {
                         </div>
                     ) : (
                         <>
-                            <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
+                            <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Exams</h2>
                             {exams.length === 0 ? (
                                 <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
                                     <ClipboardList size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
@@ -1447,7 +1376,7 @@ const loadConversation = async (teacherId) => {
                             ) : (
                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {exams.map(exam => (
-                                        <div key={exam.id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                        <div key={exam.id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                             <ClipboardList size={24} className="text-blue-500 mb-3"/>
                                             <h4 className="font-bold text-lg mb-2">{exam.title}</h4>
                                             <p className="text-sm text-gray-500 mb-4">{exam.questions.length} Questions</p>
@@ -1464,25 +1393,25 @@ const loadConversation = async (teacherId) => {
             )}
 
             {/* --- 5. INTERNSHIPS SECTION --- */}
+            {/* ✅ 5. شيل "Approved" */}
             {activeTab === 'internships' && (
                 <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 no-print">
-                    <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
+                    <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Available Internships</h2>
                     {approvedInternships.length === 0 ? (
                         <div className="p-12 text-center bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed">
                             <Briefcase size={48} className="mx-auto text-gray-300 dark:text-slate-600 mb-3"/>
-                            <p className="text-gray-500">No approved internships available right now.</p>
+                            <p className="text-gray-500">No internships available right now.</p>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {approvedInternships.map(intern => (
-                                <div key={intern._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                <div key={intern._id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                     <Briefcase size={24} className="text-blue-500 mb-3"/>
                                     <h4 className="font-bold text-lg mb-1">{intern.title || intern.company_name || 'Internship'}</h4>
                                     <p className="text-sm text-gray-500 mb-2">{intern.location || 'Remote'}</p>
                                     <p className="text-sm text-gray-400 line-clamp-3 mb-4">{intern.description || 'No description'}</p>
-                                    <div className="flex justify-between items-center text-xs text-gray-400 mb-4">
+                                    <div className="flex items-center text-xs text-gray-400 mb-4">
                                         <span className="flex items-center gap-1"><Clock size={12}/> {intern.duration || '3 months'}</span>
-                                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Approved</span>
                                     </div>
                                     <button onClick={(e) => handleApply(e, intern.company?._id || intern._id)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
                                         Apply Now
@@ -1495,11 +1424,12 @@ const loadConversation = async (teacherId) => {
             )}
 
             {/* --- 6. TRAINING SECTION --- */}
+            {/* ✅ 6. Choose file يضبط بالكليك */}
             {activeTab === 'training' && (
                 <div className="max-w-3xl mx-auto px-6 py-8 space-y-8 no-print">
-                    <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Training Applications</h2>
+                    <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Training Applications</h2>
                     
-                    <div className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`p-8 rounded-2xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                         <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Submit Training Request</h3>
                         <form onSubmit={(e) => handleApply(e)} className="space-y-6">
                             <div>
@@ -1514,11 +1444,25 @@ const loadConversation = async (teacherId) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Upload CV</label>
-                                <div className={`border-2 border-dashed rounded-xl p-6 text-center ${darkMode ? 'border-slate-600 hover:border-slate-500' : 'border-gray-300 hover:border-gray-400'} transition-colors`}>
-                                    <Upload size={32} className="mx-auto text-gray-400 mb-2"/>
-                                    <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="text-sm"/>
-                                    {cvFile && <p className="text-sm text-green-500 mt-2">Selected: {cvFile.name}</p>}
-                                </div>
+                                <input 
+                                  type="file" 
+                                  id="cv-file-input" 
+                                  accept=".pdf,.doc,.docx" 
+                                  onChange={handleFileChange} 
+                                  className="hidden" 
+                                />
+                                <label 
+                                  htmlFor="cv-file-input"
+                                  className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 dark:hover:border-blue-500 dark:hover:bg-blue-900/10 ${
+                                    darkMode ? 'border-slate-600' : 'border-gray-300'
+                                  }`}
+                                >
+                                  <Upload size={32} className="text-blue-500 mb-2"/>
+                                  <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                                    {cvFile ? cvFile.name : 'Click here to choose a file'}
+                                  </span>
+                                  <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX</span>
+                                </label>
                             </div>
                             <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
                                 <Send size={18}/> Submit Application
@@ -1531,7 +1475,7 @@ const loadConversation = async (teacherId) => {
                             <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">My Applications</h3>
                             <div className="space-y-3">
                                 {apps.map(app => (
-                                    <div key={app.id} className={`flex items-center justify-between p-4 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                    <div key={app.id} className={`flex items-center justify-between p-4 rounded-xl border text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                         <div>
                                             <p className="font-semibold">{app.companyName}</p>
                                             <p className="text-xs text-gray-400">{new Date(app.date).toLocaleDateString()}</p>
@@ -1549,15 +1493,15 @@ const loadConversation = async (teacherId) => {
                 </div>
             )}
 
-            {/* ✅ --- 7. MESSAGES SECTION --- مزبطّت بالكامل */}
+            {/* --- 7. MESSAGES SECTION --- */}
+            {/* ✅ 7. شيل "re" تحت الإيميل */}
             {activeTab === 'messages' && (
               <div className={`max-w-7xl mx-auto rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 
-                {/* Sidebar - Teachers List */}
-                <div className={`w-1/3 border-r flex flex-col ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`w-1/3 border-r flex flex-col text-left ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-gray-50'}`}>
                   <div className="p-4 border-b dark:border-slate-700">
-                    <h3 className="font-bold mb-3">My Teachers</h3>
-                    <p className="text-xs text-gray-400 mb-2">Teachers from your enrolled courses</p>
+                    <h3 className="font-bold mb-1">My Teachers</h3>
+                    <p className="text-xs text-gray-400">Teachers from your enrolled courses</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {teachersList.length === 0 ? (
@@ -1579,7 +1523,7 @@ const loadConversation = async (teacherId) => {
                           <div className="min-w-0">
                             <p className="font-semibold text-sm truncate">{t.name}</p>
                             <p className="text-xs text-gray-400 truncate">{t.email}</p>
-                            <p className="text-[10px] text-blue-500 truncate mt-0.5">{t.courseTitle}</p>
+                            {/* ✅ 7. تم شيل سطر courseTitle اللي كان تحت الإيميل */}
                           </div>
                         </div>
                       ))
@@ -1587,9 +1531,7 @@ const loadConversation = async (teacherId) => {
                   </div>
                 </div>
 
-                {/* Chat Area */}
                 <div className="w-2/3 flex flex-col">
-                  {/* Chat Header */}
                   <div className={`border-b p-4 dark:border-slate-700 ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
                     {selectedTeacher ? (
                       <div className="flex items-center gap-3">
@@ -1606,7 +1548,6 @@ const loadConversation = async (teacherId) => {
                     )}
                   </div>
 
-                  {/* Messages Area */}
                   <div id="chat-messages" className="flex-1 p-4 overflow-y-auto space-y-3">
                     {!selectedTeacher ? (
                       <div className="flex items-center justify-center h-full">
@@ -1646,7 +1587,6 @@ const loadConversation = async (teacherId) => {
                     <div ref={chatEndRef} />
                   </div>
 
-                  {/* Message Input */}
                   <form onSubmit={handleSendMessage} className="p-4 border-t dark:border-slate-700 flex gap-2">
                     <input 
                       required 
@@ -1659,9 +1599,13 @@ const loadConversation = async (teacherId) => {
                     <Button 
                       type="submit" 
                       disabled={!selectedTeacher || !messageText.trim()}
-                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${!selectedTeacher || !messageText.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${
+                        !selectedTeacher || !messageText.trim()
+                          ? 'bg-gray-300 dark:bg-slate-600 text-gray-500 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30'
+                      }`}
                     >
-                      <Send size={18}/>
+                      <Send size={16} />
                     </Button>
                   </form>
                 </div>
@@ -1671,71 +1615,90 @@ const loadConversation = async (teacherId) => {
           </motion.div>
         </AnimatePresence>
       )}
-            {/* ✅ AI Chatbot Floating UI */}
-      <>
-        <button 
-          onClick={() => setIsAiChatOpen(!isAiChatOpen)}
-          className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white items-center justify-center shadow-2xl z-50 transition-transform hover:scale-110"
-          style={{ display: 'flex' }}
-        >
-          {isAiChatOpen ? <X size={28} /> : <MessageSquare size={28} />}
-        </button>
 
-        {isAiChatOpen && (
-          <div className={`fixed bottom-24 right-6 w-96 h-[500px] rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-200 text-slate-800'}`}
-               style={{ animation: 'slideUp 0.3s ease' }}>
-            
-            <div className="p-4 bg-blue-600 text-white flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">🤖</div>
-              <div>
-                <h3 className="font-bold">Smart AI Assistant</h3>
-                <span className="text-xs text-blue-200 flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full inline-block"></span> Online</span>
+      {/* ✅ Certificate Modal */}
+      {certificateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div id="certificate-print-area" className={`w-full max-w-3xl p-10 rounded-2xl border shadow-2xl ${darkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200'}`}>
+            <div className="text-center">
+              <div className="mb-4">
+                <Award size={48} className="mx-auto text-amber-500" />
+              </div>
+              <h2 className="text-4xl font-extrabold text-slate-800 dark:text-white mb-2">Certificate of Completion</h2>
+              <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full mb-6"></div>
+              <p className="text-gray-500 text-sm uppercase tracking-widest mb-4">This is to certify that</p>
+              <h3 className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-4">{user?.name || profileData.name || 'Student'}</h3>
+              <p className="text-gray-500 text-sm uppercase tracking-widest mb-2">has successfully completed</p>
+              <h4 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{certificateModal.title}</h4>
+              <p className="text-gray-400 text-sm mb-8">Issued on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <div className="flex justify-center gap-4 no-print">
+                <button onClick={handlePrintCertificate} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors">
+                  <Printer size={18} /> Print Certificate
+                </button>
+                <button onClick={() => setCertificateModal(null)} className="px-6 py-3 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl font-medium flex items-center gap-2 transition-colors hover:bg-gray-300 dark:hover:bg-slate-600">
+                  <X size={18} /> Close
+                </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3" style={{ background: darkMode ? '#1e293b' : '#f8fafc' }}>
-              {aiMessages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-md' : `${darkMode ? 'bg-slate-700 text-slate-200' : 'bg-white text-slate-700 border border-gray-100'} rounded-bl-md`}`}>
-                    {msg.text}
+      {/* ✅ AI Chatbot Floating Button & Modal */}
+      <div className="fixed bottom-6 right-6 z-50 no-print">
+        {isAiChatOpen ? (
+          <div className={`w-96 h-[500px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+            <div className={`p-4 border-b flex justify-between items-center ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+              <h3 className="font-bold text-sm flex items-center gap-2"><Brain size={18} className="text-purple-500"/> AI Assistant</h3>
+              <button onClick={() => setIsAiChatOpen(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button>
+            </div>
+            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+              {aiMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    m.role === 'user' 
+                      ? 'bg-purple-600 text-white rounded-br-md' 
+                      : `${darkMode ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-bl-md`
+                  }`}>
+                    {m.text}
                   </div>
                 </div>
               ))}
               {aiLoading && (
                 <div className="flex justify-start">
-                  <div className={`p-3 rounded-2xl rounded-bl-md ${darkMode ? 'bg-slate-700' : 'bg-white border border-gray-100'}`}>
+                  <div className={`px-4 py-2.5 rounded-2xl rounded-bl-md text-sm ${darkMode ? 'bg-slate-700' : 'bg-gray-100'}`}>
                     <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></span>
                     </div>
                   </div>
                 </div>
               )}
               <div ref={aiChatEndRef} />
             </div>
-
-            <div className={`p-3 flex gap-2 border-t ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-              <input
-                type="text"
+            <form onSubmit={(e) => { e.preventDefault(); sendAiMessage(); }} className="p-3 border-t dark:border-slate-700 flex gap-2">
+              <input 
                 value={aiInput}
-                onChange={(e) => setAiInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendAiMessage()}
+                onChange={e => setAiInput(e.target.value)}
                 placeholder="Ask me anything..."
-                className={`flex-1 px-4 py-2.5 rounded-xl border outline-none text-sm ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
-                disabled={aiLoading}
+                className={`flex-1 px-4 py-2 rounded-xl text-sm border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-gray-50 border-gray-200'}`}
               />
-              <button 
-                onClick={sendAiMessage} 
-                disabled={aiLoading || !aiInput.trim()}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-xl transition-colors flex items-center"
-              >
-                <Send size={18} />
+              <button type="submit" disabled={aiLoading} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl flex items-center gap-1 text-sm font-medium disabled:opacity-50">
+                <Send size={14}/>
               </button>
-            </div>
+            </form>
           </div>
+        ) : (
+          <button 
+            onClick={() => setIsAiChatOpen(true)}
+            className="w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/40 flex items-center justify-center transition-all hover:scale-110"
+          >
+            <Brain size={24}/>
+          </button>
         )}
-      </>
+      </div>
+
     </div>
   );
 };
