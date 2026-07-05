@@ -70,6 +70,7 @@ export const StudentDashboard = () => {
   const [enrollments, setEnrollments] = useState([]); 
   const [interests, setInterests] = useState([]);
   const [apps, setApps] = useState([]);
+  const [companiesList, setCompaniesList] = useState([]);
   
   const [profileData, setProfileData] = useState({ 
     name: '', 
@@ -166,6 +167,18 @@ export const StudentDashboard = () => {
                 setApprovedInternships(allInternships.filter(i => i.approval_status === 'approved'));
             }
         }
+                // ✅ جلب قائمة الشركات عشان نربط الإيميل بالـ ID
+        let compData = [];
+        try {
+          const compRes = await fetch('http://localhost:5000/api/companies', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (compRes.ok) {
+            const data = await compRes.json();
+            compData = Array.isArray(data) ? data : [];
+          }
+        } catch (e) {}
+        setCompaniesList(compData);
 
         const wsRes = await fetch('http://localhost:5000/api/workshops', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -179,7 +192,7 @@ export const StudentDashboard = () => {
         }
   
         setProfileData({
-                        name: user?.name || user?.email?.split('@')[0] || '',
+            name: user?.name || user?.email?.split('@')[0] || '',
             bio: '',
             university: '',
             phone: '',
@@ -385,12 +398,12 @@ export const StudentDashboard = () => {
     }
   };
 
-  const handleApply = async (e, companyIdOverride = null) => {
+    const handleApply = async (e, companyIdOverride = null) => {
     if (e) e.preventDefault();
     const targetCompanyId = companyIdOverride || trainingData.company;
 
     if (!targetCompanyId) {
-      alert("Please enter a company ID or Name");
+      alert("Please select a company");
       return;
     }
 
@@ -400,19 +413,25 @@ export const StudentDashboard = () => {
       const formData = new FormData();
       formData.append('companyId', targetCompanyId);
       
-      if (cvFile) formData.append('cv', cvFile);
+      if (cvFile) {
+          formData.append('cv', cvFile);
+      }
 
       const res = await fetch('http://localhost:5000/api/applications/apply', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: {
+            'Authorization': `Bearer ${token}`
+        },
         body: formData 
       });
 
       if (res.ok) {
         const result = await res.json();
         alert("Application Sent Successfully!");
+        
         setTrainingData({ company: '', cv: '' });
         setCvFile(null); 
+        
         setApps([...apps, {
           id: result._id || Date.now(), 
           companyName: targetCompanyId, 
@@ -1408,7 +1427,12 @@ export const StudentDashboard = () => {
                                 <div key={intern._id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                     <Briefcase size={24} className="text-blue-500 mb-3"/>
                                     <h4 className="font-bold text-lg mb-1">{intern.title || intern.company_name || 'Internship'}</h4>
-                                    <p className="text-sm text-gray-500 mb-2">{intern.location || 'Remote'}</p>
+                                    <p className="text-sm text-gray-500 mb-1">{intern.location || 'Remote'}</p>
+                                    {intern.company?.email && (
+                                        <p className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 px-2 py-1 rounded-md inline-block mb-2 font-mono">
+                                            {intern.company.email}
+                                        </p>
+                                    )}
                                     <p className="text-sm text-gray-400 line-clamp-3 mb-4">{intern.description || 'No description'}</p>
                                     <div className="flex items-center text-xs text-gray-400 mb-4">
                                         <span className="flex items-center gap-1"><Clock size={12}/> {intern.duration || '3 months'}</span>
@@ -1433,14 +1457,26 @@ export const StudentDashboard = () => {
                         <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Submit Training Request</h3>
                         <form onSubmit={(e) => handleApply(e)} className="space-y-6">
                             <div>
-                                <label className="block text-sm font-medium mb-2">Company Name / ID</label>
-                                <input 
+                                <label className="block text-sm font-medium mb-2">Select Company</label>
+                                <select 
                                     required
                                     value={trainingData.company}
                                     onChange={(e) => setTrainingData({...trainingData, company: e.target.value})}
                                     className={`w-full px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
-                                    placeholder="Enter company name or ID"
-                                />
+                                >
+                                    <option value="">-- Choose a Company --</option>
+                                    {/* نجمع الشركات الفريدة من الـ internships */}
+                                    {[...new Map(approvedInternships.map(intern => {
+                                        const companyId = intern.company?._id || intern.company_id || intern.company;
+                                                                            const companyName = intern.company?.name || intern.company_name || (intern.company?.email ? intern.company.email.split('@')[0] : 'Unknown Company');
+                                        return [companyId, companyName];
+                                    }))].map(([id, name]) => (
+                                        <option key={id} value={id}>{name}</option>
+                                    ))}
+                                </select>
+                                {approvedInternships.length === 0 && (
+                                    <p className="text-xs text-red-400 mt-2">No approved companies found. Please check the Internships tab first.</p>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Upload CV</label>

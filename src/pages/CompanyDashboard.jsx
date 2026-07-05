@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { useLanguage } from '../context/LanguageContext';
 import { 
-  Briefcase, FileText, MessageSquare, Search, Users, Plus, 
-  CheckCircle, XCircle, Send, Filter, MoreVertical, Calendar, 
-  MapPin, DollarSign, Shield, Moon, Sun, TrendingUp, Clock, Download, 
-  User, Mail, Tag, Map as MapPinIcon
+  Briefcase, FileText, Search, Plus, 
+  CheckCircle, XCircle, Send, Tag, 
+  Shield, Moon, Sun, TrendingUp, Clock, Download, 
+  LogOut, Users, UserCheck
 } from 'lucide-react';
 
 export const CompanyDashboard = () => {
@@ -15,11 +15,10 @@ export const CompanyDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   
-  // States
   const [internships, setInternships] = useState([]);
   const [applications, setApplications] = useState([]);
-  const [talents, setTalents] = useState([]); // قائمة الطلاب (المواهب)
-  const [searchSkill, setSearchSkill] = useState(''); // بحث بال مهارة
+  const [talents, setTalents] = useState([]);
+  const [searchSkill, setSearchSkill] = useState('');
   
   const [showJobForm, setShowJobForm] = useState(false);
   const [jobFormData, setJobFormData] = useState({ title: '', type: 'On-site', location: '', description: '' });
@@ -31,26 +30,27 @@ export const CompanyDashboard = () => {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // === تحميل البيانات ===
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
       try {
-        // 1. جلب الوظائف
         const jobsRes = await fetch('http://localhost:5000/api/internships', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(jobsRes.ok) setInternships(await jobsRes.json());
 
-        // 2. جلب الطلبات
         const appsRes = await fetch('http://localhost:5000/api/applications/company', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(appsRes.ok) {
             const appsData = await appsRes.json();
-            // بناء رابط التحميل السيرة الذاتية
             const enrichedApps = appsData.map(app => ({
                 ...app,
                 cvUrl: app.cv ? `http://localhost:5000/uploads/${app.cv}` : null
@@ -58,7 +58,6 @@ export const CompanyDashboard = () => {
             setApplications(enrichedApps);
         }
         
-        // --- NEW: MOCK TALENTS DATA (Students) ---
         setTalents([
             { id: 1, name: 'Ahmad Khalil', email: 'ahmad@test.com', university: 'Jordan University', skills: ['React', 'Node.js', 'MongoDB'], status: 'Available' },
             { id: 2, name: 'Sara Mansour', email: 'sara@test.com', university: 'Yarmouk University', skills: ['Python', 'AI', 'Data Science'], status: 'Available' },
@@ -74,7 +73,6 @@ export const CompanyDashboard = () => {
     loadData();
   }, [refresh]);
 
-  // === نشر وظيفة جديدة ===
   const handlePostJob = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -103,7 +101,6 @@ export const CompanyDashboard = () => {
     }
   };
 
-  // === التعامل مع الطلب (قبول/رفض) ===
   const handleApplicationAction = async (id, action) => {
     const token = localStorage.getItem('token');
     const url = action === 'accepted' 
@@ -128,12 +125,9 @@ export const CompanyDashboard = () => {
     }
   };
 
-  // --- NEW: SEND INVITATION HANDLER ---
   const handleInvite = (studentId, studentName) => {
     if (confirm(`Send invitation to ${studentName}?`)) {
-        // في الواقع هنا بعتل للباك إند
         alert(`Invitation sent to ${studentName} successfully!`);
-        // حذف أو تحديث حالة الطالب مؤقتاً (اختياري)
         setTalents(talents.map(t => t.id === studentId ? { ...t, status: 'Invited' } : t));
     }
   };
@@ -150,12 +144,17 @@ export const CompanyDashboard = () => {
     <div className={`p-6 min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
       <header className="flex justify-between items-center mb-8">
         <div>
-          <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>Company Dashboard</h1>
-          <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">Manage your internships</p>
+          <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>Company <span className="text-primary-600">Dashboard</span></h1>
+          <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">Manage your internships & talent</p>
         </div>
-        <button onClick={() => setDarkMode(!darkMode)} className={`p-3 rounded-full ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
-          {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setDarkMode(!darkMode)} className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button onClick={handleLogout} className={`p-3 rounded-full transition-colors duration-200 ${darkMode ? 'bg-slate-800 text-red-400 hover:bg-red-900/30' : 'bg-gray-200 text-red-500 hover:bg-red-50'}`} title="Logout">
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       <div className={`flex overflow-x-auto border-b gap-2 rounded-t-xl px-2 shadow-sm mb-8 mx-6 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -165,58 +164,113 @@ export const CompanyDashboard = () => {
         <TabButton id="review-applications" label="Review Applications" icon={FileText} />
       </div>
 
-      {loading ? <div className="p-20 text-center">Loading...</div> : (
+      {loading ? <div className="p-20 text-center text-gray-500 dark:text-slate-400">Loading Dashboard...</div> : (
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
 
-            {/* --- 1. OVERVIEW SECTION --- */}
+            {/* ========== OVERVIEW ========== */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
+                {/* 3 كروت بس */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className={`p-6 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <div>
-                            <p className="text-sm text-gray-500 dark:text-slate-400 font-bold uppercase">My Internships</p>
-                            <h3 className="text-3xl font-bold text-slate-800 dark:text-white mt-2">{internships.length}</h3>
-                        </div>
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg"><Briefcase size={28}/></div>
-                    </div>
-
-                    <div className={`p-6 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <div>
-                            <p className="text-sm text-gray-500 dark:text-slate-400 font-bold uppercase">Applications</p>
-                            <h3 className="text-3xl font-bold text-slate-800 dark:text-white mt-2">{applications.length}</h3>
-                        </div>
-                        <div className="p-3 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-lg"><FileText size={28}/></div>
-                    </div>
-
-                    <div className={`p-6 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <div>
-                            <p className="text-sm text-gray-500 dark:text-slate-400 font-bold uppercase">Active Jobs</p>
-                            <h3 className="text-3xl font-bold text-slate-800 dark:text-white mt-2">{internships.filter(i => i.status === 'approved').length}</h3>
-                        </div>
-                        <div className="p-3 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-lg"><CheckCircle size={28}/></div>
-                    </div>
+                  {[
+                    { title: "My Internships", val: internships.length, color: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-slate-800 dark:text-blue-400 dark:border-slate-700", icon: Briefcase },
+                    { title: "Applications", val: applications.length, color: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:border-slate-700", icon: FileText },
+                    { title: "Active Jobs", val: internships.filter(i => i.status === 'approved').length, color: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-slate-800 dark:text-amber-400 dark:border-slate-700", icon: CheckCircle }
+                  ].map((item, i) => (
+                    <motion.div 
+                      key={i} 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      whileHover={{ y: -5 }} 
+                      className={`p-6 rounded-xl shadow-sm border ${item.color} flex items-center justify-between relative overflow-hidden group cursor-default`}
+                    >
+                      <div className="relative z-10">
+                        <p className="text-sm opacity-90 font-medium">{item.title}</p>
+                        <h3 className="text-3xl font-bold mt-2">{item.val}</h3>
+                      </div>
+                      <div className="p-3 bg-white/30 dark:bg-slate-700/30 rounded-lg relative z-10 group-hover:rotate-12 transition-transform duration-300">
+                        <item.icon size={28} />
+                      </div>
+                      <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                    </motion.div>
+                  ))}
                 </div>
-                
+
+                {/* Recent Activity */}
                 <div className={`p-6 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <h3 className={`font-bold text-lg mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Recent Activity</h3>
-                    {internships.length === 0 ? <p className="text-gray-500 text-sm bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl">No internships posted yet.</p> : (
-                        <ul className="space-y-3">
-                            {internships.slice(0, 3).map(job => (
-                                <li key={job._id} className={`flex justify-between items-center text-sm p-3 bg-gray-50 dark:bg-slate-700 rounded-lg border-gray-100 dark:border-slate-700`}>
-                                    <span className="font-medium text-slate-700 dark:text-slate-200">{job.title}</span>
-                                    <span className={`text-xs px-2 py-1 rounded-full ${job.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                        {job.status}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                  <h3 className={`font-bold text-lg mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                    <Clock size={18} className="text-primary-600" /> Recent Activity
+                  </h3>
+                  {internships.length === 0 ? (
+                    <p className="text-gray-500 text-sm bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl">No internships posted yet. Start by posting your first internship!</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {internships.slice(0, 5).map((job, idx) => (
+                        <motion.li 
+                          key={job._id} 
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className={`flex justify-between items-center text-sm p-4 bg-gray-50 dark:bg-slate-700/60 rounded-xl border border-gray-100 dark:border-slate-700 hover:shadow-sm transition-shadow`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${job.status === 'approved' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'}`}>
+                              <Briefcase size={16} />
+                            </div>
+                            <div>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{job.title}</span>
+                              <span className={`block text-xs ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>{job.type} · {job.location}</span>
+                            </div>
+                          </div>
+                          <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${job.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : job.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                            {job.status}
+                          </span>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Recent Applications */}
+                <div className={`p-6 rounded-xl border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                  <h3 className={`font-bold text-lg mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                    <Users size={18} className="text-emerald-500" /> Recent Applications
+                  </h3>
+                  {applications.length === 0 ? (
+                    <p className="text-gray-500 text-sm bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl">No applications received yet.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {applications.slice(0, 5).map((app, idx) => (
+                        <motion.li 
+                          key={app._id || app.id} 
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className={`flex justify-between items-center text-sm p-4 bg-gray-50 dark:bg-slate-700/60 rounded-xl border border-gray-100 dark:border-slate-700 hover:shadow-sm transition-shadow`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
+                              {(app.student?.name || app.name || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{app.student?.name || app.name || 'Unknown'}</span>
+                              <span className={`block text-xs ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>{app.internship?.title || 'Applicant'}</span>
+                            </div>
+                          </div>
+                          <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${app.status === 'accepted' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : app.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                            {app.status}
+                          </span>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* --- 2. POST INTERNSHIP SECTION --- */}
+            {/* ========== POST INTERNSHIP ========== */}
             {activeTab === 'post-internship' && (
               <div className="max-w-2xl mx-auto">
                 <div className={`p-8 rounded-xl shadow-sm border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -238,7 +292,7 @@ export const CompanyDashboard = () => {
                       </div>
                       <div>
                         <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>Location</label>
-                        <input required type="text" placeholder="Amman, Jordan" 
+                        <input required type="text" placeholder="" 
                           className={`w-full px-4 py-2 border rounded-lg outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white'}`}
                           value={jobFormData.location} onChange={e => setJobFormData({...jobFormData, location: e.target.value})} />
                       </div>
@@ -258,7 +312,7 @@ export const CompanyDashboard = () => {
               </div>
             )}
 
-            {/* --- 3. FIND TALENT SECTION (NEW) --- */}
+            {/* ========== FIND TALENT ========== */}
             {activeTab === 'find-talent' && (
                 <div className="max-w-7xl mx-auto space-y-6">
                     <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -303,7 +357,7 @@ export const CompanyDashboard = () => {
                                 </div>
 
                                 <div className="flex items-center justify-between border-t pt-3 dark:border-slate-700">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded ${student.status === 'Available' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${student.status === 'Available' ? 'bg-green-100 text-green-700' : student.status === 'Invited' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
                                         {student.status}
                                     </span>
                                     {student.status !== 'Employed' && (
@@ -321,7 +375,7 @@ export const CompanyDashboard = () => {
                 </div>
             )}
 
-            {/* --- 4. REVIEW APPLICATIONS SECTION --- */}
+            {/* ========== REVIEW APPLICATIONS ========== */}
             {activeTab === 'review-applications' && (
               <div className={`rounded-xl shadow-sm border overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <div className="p-4 border-b flex justify-between items-center bg-gray-50 dark:bg-slate-700/50">
@@ -374,8 +428,8 @@ export const CompanyDashboard = () => {
                           <td className="p-4 text-right">
                             {app.status === 'pending' ? (
                               <div className="flex justify-end gap-2">
-                                <button onClick={() => handleApplicationAction(app._id, 'rejected')} className="text-red-500 hover:bg-red-50 p-2 rounded"><XCircle size={16}/></button>
-                                <button onClick={() => handleApplicationAction(app._id, 'accepted')} className="bg-green-600 text-white p-2 rounded hover:bg-green-700"><CheckCircle size={16}/></button>
+                                <button onClick={() => handleApplicationAction(app._id, 'rejected')} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors"><XCircle size={16}/></button>
+                                <button onClick={() => handleApplicationAction(app._id, 'accepted')} className="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors"><CheckCircle size={16}/></button>
                               </div>
                             ) : (
                               <span className="text-xs text-gray-400 uppercase font-bold">Processed</span>
@@ -388,7 +442,6 @@ export const CompanyDashboard = () => {
                 </div>
               </div>
             )}
-            
 
           </motion.div>
         </AnimatePresence>
