@@ -26,6 +26,8 @@ export const StudentDashboard = () => {
   
   const [approvedInternships, setApprovedInternships] = useState([]);
   const [cvFile, setCvFile] = useState(null); 
+const [showApplyModal, setShowApplyModal] = useState(false); // ✅ أضف هذا
+const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أضف هذا
   
   const [exams, setExams] = useState([
       { 
@@ -83,7 +85,7 @@ export const StudentDashboard = () => {
     dob: '' 
   });
   
-  const [trainingData, setTrainingData] = useState({ company: '', cv: '' });
+  const [trainingData, setTrainingData] = useState({ company: '', internship: '', cv: '' });
   const [testScore, setTestScore] = useState(null);
 
   useEffect(() => {
@@ -398,20 +400,17 @@ export const StudentDashboard = () => {
     }
   };
 
-    const handleApply = async (e, companyIdOverride = null) => {
+  const handleApply = async (e, { companyId, internshipId } = {}) => {
     if (e) e.preventDefault();
-    const targetCompanyId = companyIdOverride || trainingData.company;
-
-    if (!targetCompanyId) {
-      alert("Please select a company");
-      return;
-    }
-
+    
     const token = localStorage.getItem('token');
 
     try {
       const formData = new FormData();
-      formData.append('companyId', targetCompanyId);
+      
+      // ✅ الباكند متوقع اسم الحقل 'internship' مش 'internshipId'
+      if (internshipId) formData.append('internship', internshipId);
+      if (companyId) formData.append('companyId', companyId);
       
       if (cvFile) {
           formData.append('cv', cvFile);
@@ -426,15 +425,12 @@ export const StudentDashboard = () => {
       });
 
       if (res.ok) {
-        const result = await res.json();
         alert("Application Sent Successfully!");
-        
-        setTrainingData({ company: '', cv: '' });
         setCvFile(null); 
-        
-        setApps([...apps, {
-          id: result._id || Date.now(), 
-          companyName: targetCompanyId, 
+        setApps(prev => [...prev, {
+          id: Date.now(), 
+          companyId: companyId, 
+          internshipId: internshipId,
           status: 'pending', 
           date: new Date()
         }]);
@@ -444,10 +440,9 @@ export const StudentDashboard = () => {
       }
     } catch (error) {
       console.error(error);
-      alert("Server Error: Could not connect to backend");
+      alert("Server Error");
     }
   };
-
   const startExam = async (exam) => {
       const token = localStorage.getItem('token');
       setExamResult(null);
@@ -1437,97 +1432,135 @@ export const StudentDashboard = () => {
                                     <div className="flex items-center text-xs text-gray-400 mb-4">
                                         <span className="flex items-center gap-1"><Clock size={12}/> {intern.duration || '3 months'}</span>
                                     </div>
-                                    <button onClick={(e) => handleApply(e, intern.company?._id || intern._id)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-                                        Apply Now
-                                    </button>
+                                    <button 
+    onClick={() => {
+        setSelectedInternship(intern);
+        setShowApplyModal(true);
+        setCvFile(null); // نفضي الملف القديم إذا كان موجود
+    }} 
+    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+>
+    Apply Now
+</button>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
             )}
+{activeTab === 'training' && (
+    <div className="max-w-3xl mx-auto px-6 py-8 space-y-8 no-print">
+        <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Training Applications</h2>
+        
+        <div className={`p-8 rounded-2xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+            <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Submit Training Request</h3>
+            <form onSubmit={(e) => handleApply(e)} className="space-y-6">
+                
+                {/* ✅ dropdown للشركة */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Select Company</label>
+                    <select 
+                        required
+                        value={trainingData.company}
+                        onChange={(e) => {
+                            const newCompany = e.target.value;
+                            setTrainingData(prev => ({ ...prev, company: newCompany, internship: '' }));
+                        }}
+                        className={`w-full px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
+                    >
+                        <option value="">-- Choose a Company --</option>
+                        {[...new Map(approvedInternships.map(intern => {
+                            const companyId = intern.company?._id || intern.company_id || intern.company;
+                            const companyName = intern.company?.name || intern.company_name || (intern.company?.email ? intern.company.email.split('@')[0] : 'Unknown Company');
+                            return [companyId, { id: companyId, name: companyName }];
+                        }))].map(([id, info]) => (
+                            <option key={id} value={id}>{info.name}</option>
+                        ))}
+                    </select>
+                </div>
 
-            {/* --- 6. TRAINING SECTION --- */}
-            {/* ✅ 6. Choose file يضبط بالكليك */}
-            {activeTab === 'training' && (
-                <div className="max-w-3xl mx-auto px-6 py-8 space-y-8 no-print">
-                    <h2 className={`text-3xl font-bold text-left ${darkMode ? 'text-white' : 'text-slate-900'}`}>Training Applications</h2>
-                    
-                    <div className={`p-8 rounded-2xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                        <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Submit Training Request</h3>
-                        <form onSubmit={(e) => handleApply(e)} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Select Company</label>
-                                <select 
-                                    required
-                                    value={trainingData.company}
-                                    onChange={(e) => setTrainingData({...trainingData, company: e.target.value})}
-                                    className={`w-full px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
-                                >
-                                    <option value="">-- Choose a Company --</option>
-                                    {/* نجمع الشركات الفريدة من الـ internships */}
-                                    {[...new Map(approvedInternships.map(intern => {
-                                        const companyId = intern.company?._id || intern.company_id || intern.company;
-                                                                            const companyName = intern.company?.name || intern.company_name || (intern.company?.email ? intern.company.email.split('@')[0] : 'Unknown Company');
-                                        return [companyId, companyName];
-                                    }))].map(([id, name]) => (
-                                        <option key={id} value={id}>{name}</option>
-                                    ))}
-                                </select>
-                                {approvedInternships.length === 0 && (
-                                    <p className="text-xs text-red-400 mt-2">No approved companies found. Please check the Internships tab first.</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Upload CV</label>
-                                <input 
-                                  type="file" 
-                                  id="cv-file-input" 
-                                  accept=".pdf,.doc,.docx" 
-                                  onChange={handleFileChange} 
-                                  className="hidden" 
-                                />
-                                <label 
-                                  htmlFor="cv-file-input"
-                                  className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 dark:hover:border-blue-500 dark:hover:bg-blue-900/10 ${
-                                    darkMode ? 'border-slate-600' : 'border-gray-300'
-                                  }`}
-                                >
-                                  <Upload size={32} className="text-blue-500 mb-2"/>
-                                  <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                                    {cvFile ? cvFile.name : 'Click here to choose a file'}
-                                  </span>
-                                  <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX</span>
-                                </label>
-                            </div>
-                            <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
-                                <Send size={18}/> Submit Application
-                            </button>
-                        </form>
-                    </div>
-
-                    {apps.length > 0 && (
-                        <div>
-                            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">My Applications</h3>
-                            <div className="space-y-3">
-                                {apps.map(app => (
-                                    <div key={app.id} className={`flex items-center justify-between p-4 rounded-xl border text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                                        <div>
-                                            <p className="font-semibold">{app.companyName}</p>
-                                            <p className="text-xs text-gray-400">{new Date(app.date).toLocaleDateString()}</p>
-                                        </div>
-                                        <span className={`text-xs px-3 py-1 rounded-full font-bold ${
-                                            app.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                            app.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                            'bg-red-100 text-red-700'
-                                        }`}>{app.status}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                {/* ✅ dropdown للـ Internship - جديد! */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Select Internship</label>
+                    <select 
+                        required
+                        value={trainingData.internship}
+                        onChange={(e) => setTrainingData({...trainingData, internship: e.target.value})}
+                        className={`w-full px-4 py-3 rounded-xl border outline-none ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-300'}`}
+                        disabled={!trainingData.company}
+                    >
+                        <option value="">-- Choose an Internship --</option>
+                        {trainingData.company && approvedInternships
+                            .filter(intern => {
+                                const companyId = intern.company?._id || intern.company_id || intern.company;
+                                return companyId?.toString() === trainingData.company?.toString();
+                            })
+                            .map(intern => (
+                                <option key={intern._id} value={intern._id}>
+                                    {intern.title} - {intern.location || 'Remote'}
+                                </option>
+                            ))
+                        }
+                    </select>
+                    {!trainingData.company && (
+                        <p className="text-xs text-gray-400 mt-2">Select a company first</p>
                     )}
                 </div>
-            )}
+
+                {/* CV Upload */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Upload CV</label>
+                    <input 
+                      type="file" 
+                      id="cv-file-input" 
+                      accept=".pdf,.doc,.docx" 
+                      onChange={handleFileChange} 
+                      className="hidden" 
+                    />
+                    <label 
+                      htmlFor="cv-file-input"
+                      className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 dark:hover:border-blue-500 dark:hover:bg-blue-900/10 ${
+                        darkMode ? 'border-slate-600' : 'border-gray-300'
+                      }`}
+                    >
+                      <Upload size={32} className="text-blue-500 mb-2"/>
+                      <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                        {cvFile ? cvFile.name : 'Click here to choose a file'}
+                      </span>
+                      <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX</span>
+                    </label>
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                    <Send size={18}/> Submit Application
+                </button>
+            </form>
+        </div>
+
+        {/* My Applications */}
+        {apps.length > 0 && (
+            <div>
+                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">My Applications</h3>
+                <div className="space-y-3">
+                    {apps.map(app => (
+                        <div key={app.id} className={`flex items-center justify-between p-4 rounded-xl border text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div>
+                                <p className="font-semibold">{app.companyName}</p>
+                                {app.internshipId && <p className="text-xs text-blue-400">Internship ID: {app.internshipId}</p>}
+                                <p className="text-xs text-gray-400">{new Date(app.date).toLocaleDateString()}</p>
+                            </div>
+                            <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                                app.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                app.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                'bg-red-100 text-red-700'
+                            }`}>{app.status}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+    </div>
+)}
 
             {/* --- 7. MESSAGES SECTION --- */}
             {/* ✅ 7. شيل "re" تحت الإيميل */}
@@ -1734,6 +1767,84 @@ export const StudentDashboard = () => {
           </button>
         )}
       </div>
+
+      {/* --- هنا حط كود المودل --- */}
+      <AnimatePresence>
+        {showApplyModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm no-print"
+            onClick={() => setShowApplyModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.9, y: 20 }}
+              className={`w-full max-w-md mx-4 p-6 rounded-2xl shadow-2xl border ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-200 text-slate-800'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold">Apply to Internship</h3>
+                <button onClick={() => setShowApplyModal(false)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={24}/></button>
+              </div>
+              
+              {/* Internship Info */}
+              {selectedInternship && (
+                <div className={`p-4 rounded-xl mb-6 border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-100'}`}>
+                  <h4 className="font-bold text-blue-600 dark:text-blue-400">{selectedInternship.title}</h4>
+                  <p className="text-sm text-gray-500 mt-1">{selectedInternship.location || 'Remote'}</p>
+                </div>
+              )}
+
+              {/* CV Upload */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Upload your CV (Optional)</label>
+                <input 
+                  type="file" 
+                  id="modal-cv-input"
+                  accept=".pdf,.doc,.docx" 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                />
+                <label 
+                  htmlFor="modal-cv-input"
+                  className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 dark:hover:border-blue-500 dark:hover:bg-blue-900/10 ${
+                    darkMode ? 'border-slate-600' : 'border-gray-300'
+                  }`}
+                >
+                  <Upload size={28} className="text-blue-500 mb-2"/>
+                  <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                    {cvFile ? cvFile.name : 'Click to choose CV file'}
+                  </span>
+                  <span className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX</span>
+                </label>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowApplyModal(false)} 
+                  className={`flex-1 py-3 rounded-xl font-medium border transition-colors ${darkMode ? 'border-slate-600 hover:bg-slate-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={(e) => {
+                    handleApply(e, { internshipId: selectedInternship._id });
+                    setShowApplyModal(false); 
+                  }} 
+                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Send size={16} /> Submit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

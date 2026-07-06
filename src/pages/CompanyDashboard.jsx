@@ -51,7 +51,7 @@ export const CompanyDashboard = () => {
         });
         if(appsRes.ok) {
             const appsData = await appsRes.json();
-            const enrichedApps = appsData.map(app => ({
+            const enrichedApps = (appsData.applications || []).map(app => ({
                 ...app,
                 cvUrl: app.cv ? `http://localhost:5000/uploads/${app.cv}` : null
             }));
@@ -255,7 +255,7 @@ export const CompanyDashboard = () => {
                               {(app.student?.name || app.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <span className="font-medium text-slate-700 dark:text-slate-200">{app.student?.name || app.name || 'Unknown'}</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{app.student?.name || app.student?.email || 'Unknown'}</span>
                               <span className={`block text-xs ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>{app.internship?.title || 'Applicant'}</span>
                             </div>
                           </div>
@@ -398,8 +398,8 @@ export const CompanyDashboard = () => {
                       ) : applications.map(app => (
                         <tr key={app._id || app.id} className={`hover:${darkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
                           <td className="p-4">
-                            <div className="font-medium text-sm">{app.student?.name || app.name || 'Unknown'}</div>
-                            <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-gray-400'}`}>{app.student?.email || app.email || ''}</div>
+<div className="font-medium text-sm">{app.student?.name || app.student?.email || 'Unknown'}</div>
+<div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-gray-400'}`}>{app.student?.email || ''}</div>
                           </td>
                           <td className="p-4 text-sm">{app.internship?.title || 'Applicant'}</td>
                           
@@ -410,10 +410,10 @@ export const CompanyDashboard = () => {
                                     download="CV"
                                     target="_blank"
                                     rel="noreferrer" 
-                                    className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2 font-medium text-xs bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 px-3 py-1.5 rounded-lg transition-colors"
+                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 w-8 h-8 flex items-center justify-center rounded-md transition-colors font-bold text-[10px] bg-blue-50 dark:bg-blue-900/20"
+                                    title="Download CV"
                                 >
-                                    <Download size={14} />
-                                    <span>Download CV</span>
+                                    CV
                                 </a>
                             ) : (
                                 <span className="text-xs text-gray-400 italic">No CV</span>
