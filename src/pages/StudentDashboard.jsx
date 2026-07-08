@@ -12,6 +12,48 @@ import {
   MessageSquare, Send, Users, LogOut, XCircle
 } from 'lucide-react';
 
+// ============ MOCK DATA (حطهم هنا فوق الكومبوننت) ============
+const mockConversation1_Success = [
+  {
+    role: "user",
+    text: "What is this platform about? How can it help me as a student?"
+  },
+  {
+    role: "bot",
+    text: "Hey there! 👋 Smart Training is an all-in-one educational platform that connects students, teachers, and companies in a single environment.\n\nAs a student, the platform offers you:\n\n📚 **Courses & Workshops** - Enroll and learn new skills\n📝 **Exams & Certificates** - Test your knowledge and earn certificates\n🏢 **Internship Opportunities** - Companies post internships and you can apply directly\n🤖 **AI Assistant (that's me!)** - I help you choose the right career path, recommend courses, and generate professional cover letters when you apply for internships\n\nThe main goal is to bridge the gap between academic learning and the real job market 🎯"
+  },
+  {
+    role: "user",
+    text: "How do I find an internship that suits me?"
+  },
+  {
+    role: "bot",
+    text: "You have multiple ways to find the right internship 👇\n\n1️⃣ **Manual Browsing** - You can browse all posted internships and apply to the ones that interest you\n\n2️⃣ **Smart Matching System** ⭐ - This is the powerful feature! When a company posts an internship, the AI analyzes:\n• Internship requirements and needed skills\n• Courses you've enrolled in\n• Your exam results\n• Your skills and projects\n• Your CV data\n\nThen it recommends the top 5 students to the company with a match percentage and explanation of why each student is a good fit 🎯\n\n3️⃣ **Ask Me** - You can simply ask me and I'll recommend internships based on your profile!\n\n💡 Pro tip: Upload your CV and enroll in courses related to your field so the smart matching system can match you more accurately!"
+  }
+];
+
+const mockConversation2_OutOfScope = [
+  {
+    role: "user",
+    text: "What do you think about the last Real Madrid match?"
+  },
+  {
+    role: "bot",
+    text: "Sorry, I can't answer that question ❌\n\nI'm an AI assistant specialized in the Smart Training platform only. I can help you with:\n\n📚 Information about available courses and workshops\n📝 Questions about exams and certificates\n🏢 Internship opportunities and how to apply\n🤖 Career guidance and choosing the right career path\n📄 Improving your CV\n💡 Advice on skills you should learn\n\nIf you have any platform-related or career development questions, I'd be happy to help! 😊"
+  },
+  {
+    role: "user",
+    text: "Okay then, what's the dollar exchange rate today?"
+  },
+  {
+    role: "bot",
+    text: "Unfortunately I can't answer that either ❌\n\nMy expertise is limited to educational and career guidance within the Smart Training platform. Questions about exchange rates and general news are outside my scope.\n\nHowever, if you're looking for courses in finance or financial analysis, I can recommend some great ones from the platform! 📈\n\nSo, what would you like to know about the platform?"
+  }
+];
+// ============ نهاية MOCK DATA ============
+
+
+
 export const StudentDashboard = () => {
   const { user, logout } = useAuth();
   const [darkMode, setDarkMode] = useState(true);
@@ -29,16 +71,7 @@ export const StudentDashboard = () => {
 const [showApplyModal, setShowApplyModal] = useState(false); // ✅ أضف هذا
 const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أضف هذا
   
-  const [exams, setExams] = useState([
-      { 
-          id: 1, 
-          title: 'React Basics Quiz (Mock)', 
-          questions: [
-              { text: 'What is React?', options: ['Library', 'Framework', 'Language', 'Database'], correctIndex: 0 },
-              { text: 'What is JSX?', options: ['JS XML', 'Java XML', 'JSON', 'None'], correctIndex: 0 }
-          ]
-      }
-  ]); 
+  const [exams, setExams] = useState([]); 
   const [currentExam, setCurrentExam] = useState(null); 
   const [examAnswers, setExamAnswers] = useState({});
   const [examResult, setExamResult] = useState(null);
@@ -56,8 +89,54 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
   const chatEndRef = useRef(null);
 
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
-  const [aiMessages, setAiMessages] = useState([{ role: 'bot', text: 'Hi! How can I help you today? 🎓' }]);
+  const [aiMessages, setAiMessages] = useState([]);
   const [aiInput, setAiInput] = useState('');
+  const chatTimeoutsRef = useRef([]); // لحتى نلغي التايمر إذا قفل الشات
+
+  // ============ دالة محاكاة الشات (الطالب يسأل ← يفكر ← يرد) ============
+  const simulateChat = (conversation) => {
+    // نلغي أي محاكاة سابقة
+    chatTimeoutsRef.current.forEach(clearTimeout);
+    chatTimeoutsRef.current = [];
+
+    setAiMessages([]);
+    setAiLoading(false);
+    setIsAiChatOpen(true);
+
+    let delay = 600;
+
+    conversation.forEach((msg) => {
+      if (msg.role === 'user') {
+        // الطالب يرسل السؤال
+        chatTimeoutsRef.current.push(setTimeout(() => {
+          setAiMessages(prev => [...prev, msg]);
+        }, delay));
+        delay += 1000; // ثانية وبعدين البوت يبدأ يفكر
+
+      } else {
+        // البوت يظهر إنو بيفكر (النقاط المتحركة)
+        chatTimeoutsRef.current.push(setTimeout(() => {
+          setAiLoading(true);
+        }, delay));
+        delay += 2000; // ثانيتين تفكير
+
+        // البوت يرسل الجواب
+        chatTimeoutsRef.current.push(setTimeout(() => {
+          setAiLoading(false);
+          setAiMessages(prev => [...prev, msg]);
+        }, delay));
+        delay += 1500; // ثانية ونص وبعدين السؤال الجاي
+      }
+    });
+  };
+
+  // لما يقفل الشات نلغي كل التايمرات
+  const closeAiChat = () => {
+    chatTimeoutsRef.current.forEach(clearTimeout);
+    chatTimeoutsRef.current = [];
+    setIsAiChatOpen(false);
+  };
+  // ============
   const [aiLoading, setAiLoading] = useState(false);
   const aiChatEndRef = useRef(null);
   const WEBHOOK_URL = 'http://localhost:5678/webhook-test/chat';
@@ -73,6 +152,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
   const [interests, setInterests] = useState([]);
   const [apps, setApps] = useState([]);
   const [companiesList, setCompaniesList] = useState([]);
+  const userNameFromEmail = user?.email?.split('@')[0] || '';
   
   const [profileData, setProfileData] = useState({ 
     name: '', 
@@ -139,25 +219,40 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
             return await res.json();
         };
 
-        const cvRes = await fetch('http://localhost:5000/api/students/cv', {
+        // 1. جلب البروفايل
+        const profileRes = await fetch('http://localhost:5000/api/students/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        if(cvRes.ok) {
-          const cvData = await safeParse(cvRes);
-          if(cvData) setEnrollments(cvData);
-        } else {
-            console.error("CV Fetch Error:", cvRes.statusText);
-            setEnrollments([
-                { _id: 101, completed_at: new Date(), course: { _id: 1, title: 'Full Stack Development', teacher: { name: 'Dr. Ahmad' }, duration_hours: 40, category: 'Programming' } }
-            ]);
+        if (profileRes.ok) {
+          const pData = await profileRes.json();
+          setProfileData({
+            name: pData.full_name || user?.name || '',
+            bio: pData.bio || '',
+            university: pData.university || '',
+            phone: pData.phone || '',
+            country: pData.country || '',
+            level: pData.education_level || '',
+            gradYear: pData.graduating_year || '',
+            dob: pData.date_of_birth || ''
+          });
         }
   
+        // 2. جلب الكورسات
         const enrollRes = await fetch('http://localhost:5000/api/enrollments/my', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if(enrollRes.ok) {
           const enrollData = await safeParse(enrollRes);
           if(enrollData) setActiveEnrollments(enrollData);
+        }
+
+        // ✅ 3. جلب الامتحانات (اللي كان ناقص)
+        const examsRes = await fetch('http://localhost:5000/api/exams/student/exams', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (examsRes.ok) {
+          const examsData = await examsRes.json();
+          setExams(examsData);
         }
   
         const intRes = await fetch('http://localhost:5000/api/internships', {
@@ -169,7 +264,8 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                 setApprovedInternships(allInternships.filter(i => i.approval_status === 'approved'));
             }
         }
-                // ✅ جلب قائمة الشركات عشان نربط الإيميل بالـ ID
+
+        // جلب الشركات
         let compData = [];
         try {
           const compRes = await fetch('http://localhost:5000/api/companies', {
@@ -182,6 +278,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
         } catch (e) {}
         setCompaniesList(compData);
 
+        // جلب الوركشوبس
         const wsRes = await fetch('http://localhost:5000/api/workshops', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -189,20 +286,9 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
           const wsData = await wsRes.json();
           setWorkshops(wsData);
         } else {
-          console.error("Workshops fetch error:", wsRes.statusText);
           setWorkshops([]);
         }
   
-        setProfileData({
-            name: user?.name || user?.email?.split('@')[0] || '',
-            bio: '',
-            university: '',
-            phone: '',
-            country: '',
-            level: '',
-            gradYear: '',
-            dob: ''
-        });
   
       } catch (error) {
         console.error("Error loading data:", error);
@@ -280,26 +366,107 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
     return senderId?.toString() === myId?.toString();
   };
 
-  const sendAiMessage = async () => {
+  const sendAiMessage = () => {
     const text = aiInput.trim();
     if (!text || aiLoading) return;
+
+    // 1. أظهر رسالة المستخدم وفّر الإندبوت
     setAiMessages(prev => [...prev, { role: 'user', text }]);
     setAiInput('');
-    setAiLoading(true);
-    try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
-      });
-      const data = await res.json();
-      setAiMessages(prev => [...prev, { role: 'bot', text: data.output || data.message || 'Error.' }]);
-    } catch (err) {
-      setAiMessages(prev => [...prev, { role: 'bot', text: 'Connection error.' }]);
+    setAiLoading(true); // شغّل نقاط التفكير 💭
+
+    // 2. خزّن السؤال وصغّره عشان نبحث فيه
+    const lowerText = text.toLowerCase();
+
+    // 3. حدد الجواب المناسب بناءً على كلمات السؤال
+    let botReply = "";
+
+    if (
+      lowerText.includes("platform") || lowerText.includes("what is this") || 
+      lowerText.includes("help me") || lowerText.includes("what can i do") ||
+      lowerText.includes("شو هي") || lowerText.includes("بيفيدني")
+    ) {
+      botReply = "Hey there! 👋 Smart Training is an all-in-one educational platform that connects students, teachers, and companies.\n\nAs a student, you can:\n📚 Enroll in courses and workshops\n📝 Take exams and get certificates\n🏢 Apply for internships directly\n🤖 And I'm here to guide you through your career path!";
+    } 
+    
+    else if (
+      lowerText.includes("internship") || lowerText.includes("training") || 
+      lowerText.includes("apply") || lowerText.includes("تدريب") ||
+      lowerText.includes("تقدم")
+    ) {
+      botReply = "To find an internship that suits you, you have 3 ways:\n\n1️⃣ **Browse Manually** - Check the 'Internships' tab to see all available opportunities from companies.\n\n2️⃣ **Smart Matching** ⭐ - When companies post internships, our AI analyzes your courses, exam results, and CV, then matches you automatically!\n\n3️⃣ **Ask Me** - Tell me your skills and I'll tell you which internships fit you best.\n\n💡 Tip: Make sure to upload your CV so the matching system works perfectly for you!";
+    } 
+    
+    else if (
+      lowerText.includes("course") || lowerText.includes("learn") || 
+      lowerText.includes("recommend") || lowerText.includes("skill") ||
+      lowerText.includes("كورس") || lowerText.includes("تعلم") || lowerText.includes("مهارة")
+    ) {
+      botReply = "Great question! 🎯 To give you the best recommendation, I need to know your current level and interests.\n\nHowever, here are some popular paths:\n\n• **Frontend**: React, Tailwind CSS, TypeScript\n• **Backend**: Node.js, Express, MongoDB\n• **AI/Data**: Python, TensorFlow, Data Analysis\n\nYou can search for these in the 'My Courses' tab and enroll directly. What field interests you the most?";
+    } 
+    
+    else if (
+      lowerText.includes("cv") || lowerText.includes("resume") || 
+      lowerText.includes("سيرة") || lowerText.includes("تحسين")
+    ) {
+      botReply = "Here are my top tips to improve your CV 📄:\n\n1. **Add Completed Courses** - Any course you finish and pass its exam will be automatically added to your profile!\n2. **List Your Skills** - Make sure to mention all technologies you've learned.\n3. **Mention Projects** - Even small projects from courses count.\n4. **Keep it Updated** - Whenever you finish a new workshop or internship, add it.\n\nWant me to suggest a specific layout for your CV?";
+    } 
+    
+    else if (
+      lowerText.includes("career") || lowerText.includes("path") || 
+      lowerText.includes("job") || lowerText.includes("مسار") || lowerText.includes("وظيفة")
+    ) {
+      botReply = "Choosing a career path is important! 🚀\n\nBased on your profile and courses, I can guide you. Generally:\n\n• Love designing? → **UI/UX Design**\n• Love logic & coding? → **Software Engineering**\n• Love data & numbers? → **Data Science**\n• Love security? → **Cyber Security**\n\nTell me what you enjoy doing, and I'll give you a personalized path with specific courses to take!";
+    } 
+    
+    else if (
+      lowerText.includes("exam") || lowerText.includes("certificate") || 
+      lowerText.includes("امتحان") || lowerText.includes("شهادة")
+    ) {
+      botReply = "Here's how exams work on the platform 📝:\n\n1. Your teacher creates an exam for a course you're enrolled in.\n2. You'll find it in the 'Exams' tab.\n3. Answer the questions and submit.\n4. If you score above 60%, you PASS and the course is added to your completed courses!\n5. You can even print your certificate.\n\nNeed help preparing for a specific exam?";
     }
-    setAiLoading(false);
+
+    // ===== الأسئلة برا النطاق =====
+    else if (
+      lowerText.includes("match") || lowerText.includes("real madrid") || lowerText.includes("football") || 
+      lowerText.includes("soccer") || lowerText.includes("مباراة") || lowerText.includes("كرة")
+    ) {
+      botReply = "Sorry, I can't answer that question ❌\n\nI'm an AI assistant specialized in the Smart Training platform only. I can help you with courses, internships, career guidance, and improving your CV.\n\nIf you have any platform-related questions, I'd be happy to help! 😊";
+    } 
+    
+    else if (
+      lowerText.includes("dollar") || lowerText.includes("price") || lowerText.includes("exchange") || 
+      lowerText.includes("weather") || lowerText.includes("news") || lowerText.includes("دولار") || lowerText.includes("طقس")
+    ) {
+      botReply = "Unfortunately I can't answer that either ❌\n\nMy expertise is limited to educational and career guidance within the Smart Training platform. Questions about exchange rates, weather, or general news are outside my scope.\n\nSo, what would you like to know about the platform?";
+    }
+
+    // ===== الجواب الافتراضي =====
+    else {
+      botReply = "I'm not sure I understood that completely 🤔\n\nI can help you with:\n📚 Finding courses and workshops\n📝 Exam information\n🏢 Internship opportunities\n📄 CV improvement tips\n🤖 Career path guidance\n\nCould you rephrase your question related to the platform?";
+    }
+
+    // 4. حمّل نقاط التفكير لمدة ثانيتين وبعدين أظهر الجواب
+    setTimeout(() => {
+      setAiLoading(false);
+      setAiMessages(prev => [...prev, { role: 'bot', text: botReply }]);
+    }, 2000);
+  };
+    // ============ دالتين تجربة الـ Mock (حطهم بعد sendAiMessage) ============
+  const loadSuccessChat = () => {
+    setAiMessages(mockConversation1_Success);
+    setIsAiChatOpen(true);
   };
 
+  const loadOutOfScopeChat = () => {
+    setAiMessages(mockConversation2_OutOfScope);
+    setIsAiChatOpen(true);
+  };
+  // ============
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  return dateStr.split('T')[0];
+};
   const handleSaveProfile = async () => {
     const token = localStorage.getItem('token');
     try {
@@ -448,15 +615,16 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
       setExamResult(null);
       
       try {
-          if (exam.id && typeof exam.id === 'string' && exam.id.length > 5) {
-              const res = await fetch(`http://localhost:5000/api/exams/${exam.id}`, {
+          // ✅ غيرنا exam.id لـ exam._id
+          if (exam._id) { 
+              const res = await fetch(`http://localhost:5000/api/exams/${exam._id}`, {
                   headers: { 'Authorization': `Bearer ${token}` }
               });
 
               if (res.ok) {
                   const data = await res.json();
                   const formattedExam = {
-                      id: data.exam._id,
+                      _id: data.exam._id, // ✅ _id
                       title: data.exam.title,
                       questions: data.questions.map(q => ({
                           text: q.text,
@@ -616,9 +784,9 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                 Student Portal
               </h1>
               {/* ✅ 2. اسم الطالب الفعلي */}
-              <p className="text-sm mt-1 text-gray-500 dark:text-slate-400">
-                Welcome, {user?.name || profileData.name || 'Student'}
-              </p>
+<p className="text-sm mt-1 text-gray-500 dark:text-slate-400">
+  Welcome, {user?.email?.split('@')[0] || 'Student'}
+</p>
             </div>
             <div className="flex items-center gap-3">
               <button 
@@ -691,13 +859,9 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                             </div>
                             
                             <div className="flex-1 mb-2 text-center md:text-left">
-                                <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{profileData.name}</h2>
+                  <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{userNameFromEmail}</h2>
                                 <p className="text-xl text-primary-600 dark:text-primary-400 font-medium mt-1">{profileData.level}</p>
-                                <div className="flex flex-col md:flex-row items-center gap-4 mt-3 text-gray-600 dark:text-slate-400 text-sm">
-                                    <span className="flex items-center gap-1"><MapPinIcon size={16} className="text-primary-500"/> {profileData.university}, {profileData.country}</span>
-                                    <span className="hidden md:inline-block w-1 h-1 bg-gray-400 rounded-full"></span>
-                                    <span className="flex items-center gap-1"><Calendar size={16} className="text-primary-500"/> Class of {profileData.gradYear}</span>
-                                </div>
+                                
                             </div>
                             
                             <div className="hidden md:flex gap-4 mb-4">
@@ -705,10 +869,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                     <p className="text-2xl font-bold text-slate-800 dark:text-white">{enrollments.length + activeEnrollments.length}</p>
                                     <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Courses</p>
                                 </div>
-                                <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]">
-                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{interests.length}</p>
-                                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Interests</p>
-                                </div>
+                              
                             </div>
                         </div>
 
@@ -742,7 +903,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                         </div>
                                         <div>
                                             <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Date of Birth</p>
-                                            <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.dob}</p>
+                                           <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{formatDate(profileData.dob)}</p>
                                         </div>
                                     </div>
                                 </section>
@@ -760,11 +921,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                             </div>
                                         </div>
                                         <div className="flex items-start gap-4">
-                                            <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"><Phone size={20}/></div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 font-bold uppercase">Phone</p>
-                                                <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.phone}</p>
-                                            </div>
+                                            
                                         </div>
                                         <div className="flex items-start gap-4">
                                             <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400"><Globe size={20}/></div>
@@ -776,17 +933,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                     </div>
                                 </section>
 
-                                <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Brain size={18} className="text-primary-500"/> Interests</h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {interests.map(interest => (
-                                            <span key={interest} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300 border border-primary-100 dark:border-primary-800">
-                                                {interest}
-                                            </span>
-                                        ))}
-                                        {interests.length === 0 && <p className="text-sm text-gray-400 italic">No interests selected yet.</p>}
-                                    </div>
-                                </section>
+                              
                             </div>
                         </div>
                     </div>
@@ -830,24 +977,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                         </button>
                                     </div>
 
-                                    <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-100'}`}>
-                                        <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white"><Brain size={18} className="text-primary-600"/> My Interests</h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {interestOptions.map(interest => (
-                                                <button 
-                                                    key={interest}
-                                                    onClick={() => handleInterestToggle(interest)}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
-                                                        interests.includes(interest) 
-                                                        ? 'bg-primary-600 text-white border-primary-600 shadow-md' 
-                                                        : 'bg-white dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 hover:border-primary-600 hover:text-primary-600'
-                                                    }`}
-                                                >
-                                                    {interest}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    
                                 </div>
 
                                 <div className="lg:col-span-2 space-y-8">
@@ -863,12 +993,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label>
-                                                <input 
-                                                  value={profileData.phone} 
-                                                  onChange={(e) => setProfileData({...profileData, phone: e.target.value})} 
-                                                  className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`} 
-                                                />
+                                               
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date of Birth</label>
@@ -1390,10 +1515,10 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                             ) : (
                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {exams.map(exam => (
-                                        <div key={exam.id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                                        <div key={exam._id} className={`p-6 rounded-xl border shadow-sm text-left ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                             <ClipboardList size={24} className="text-blue-500 mb-3"/>
                                             <h4 className="font-bold text-lg mb-2">{exam.title}</h4>
-                                            <p className="text-sm text-gray-500 mb-4">{exam.questions.length} Questions</p>
+                                            <p className="text-sm text-gray-500 mb-4">Course: {exam.course?.title || 'N/A'}</p>
                                             <button onClick={() => startExam(exam)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
                                                 <Play size={16}/> Start Exam
                                             </button>
@@ -1563,7 +1688,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
 )}
 
             {/* --- 7. MESSAGES SECTION --- */}
-            {/* ✅ 7. شيل "re" تحت الإيميل */}
+  
             {activeTab === 'messages' && (
               <div className={`max-w-7xl mx-auto rounded-xl border h-[600px] flex overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 
@@ -1719,7 +1844,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
           <div className={`w-96 h-[500px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
             <div className={`p-4 border-b flex justify-between items-center ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
               <h3 className="font-bold text-sm flex items-center gap-2"><Brain size={18} className="text-purple-500"/> AI Assistant</h3>
-              <button onClick={() => setIsAiChatOpen(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button>
+                   <button onClick={closeAiChat} className="text-gray-400 hover:text-red-500"><X size={18}/></button>
             </div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {aiMessages.map((m, i) => (
@@ -1728,7 +1853,7 @@ const [selectedInternship, setSelectedInternship] = useState(null); // ✅ أض�
                     m.role === 'user' 
                       ? 'bg-purple-600 text-white rounded-br-md' 
                       : `${darkMode ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-bl-md`
-                  }`}>
+                  } whitespace-pre-line`}>
                     {m.text}
                   </div>
                 </div>

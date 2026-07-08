@@ -43,21 +43,15 @@ export const TeacherDashboard = () => {
   const [workshopData, setWorkshopData] = useState({ title: '', description: '', date: '', meeting_link: '' });
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileData, setProfileData] = useState({
-    full_name: '',
-    phone: '',
-    specialization: '',
-    qualifications: '',
-    years_experince: '',
-    linkedin_url: '',
-    cv_url: '',
-    university: '',
-    country: '',
-    gradYear: '',
-    dob: '',
-    bio: ''
-  });
-
+const [profileData, setProfileData] = useState({
+  full_name: '',
+  phone: '',
+  specialization: '',
+  qualifications: '',
+  years_experince: '',
+  linkedin_url: '',
+  cv_url: ''
+});
   const [interests, setInterests] = useState([]);
   const interestOptions = ['Web Development', 'AI', 'Data Science', 'Mathematics', 'IoT', 'Cloud Computing', 'Cybersecurity'];
 
@@ -110,23 +104,19 @@ const [editNewVideos, setEditNewVideos] = useState([]);
         const profileRes = await fetch('http://localhost:5000/api/teacher/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (profileRes.ok) {
-          const pData = await profileRes.json();
-          setProfileData({
-            full_name: pData.full_name || '',
-            phone: pData.phone || '',
-            specialization: pData.specialization || '',
-            qualifications: pData.qualifications || '',
-            years_experince: pData.years_experince || '',
-            linkedin_url: pData.linkedin_url || '',
-            cv_url: pData.cv_url || '',
-            university: pData.university || '',
-            country: pData.country || '',
-            gradYear: pData.gradYear || '',
-            dob: pData.dob || '',
-            bio: pData.bio || ''
-          });
-        }
+// ✅ احفظ الحقول اللي من الباك فقط
+if (profileRes.ok) {
+  const pData = await profileRes.json();
+  setProfileData({
+    full_name: pData.full_name || '',
+    phone: pData.phone || '',
+    specialization: pData.specialization || '',
+    qualifications: pData.qualifications || '',
+    years_experince: pData.years_experince || '',
+    linkedin_url: pData.linkedin_url || '',
+    cv_url: pData.cv_url || ''
+  });
+}
 
         const coursesRes = await fetch('http://localhost:5000/api/courses/my-courses', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -439,42 +429,39 @@ const [editNewVideos, setEditNewVideos] = useState([]);
     setNewExam({ ...newExam, questions: updatedQuestions });
   };
 
-  const handleSaveProfile = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch('http://localhost:5000/api/teacher/me', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          full_name: profileData.full_name,
-          phone: profileData.phone,
-          specialization: profileData.specialization,
-          qualifications: profileData.qualifications,
-          years_experince: profileData.years_experince,
-          linkedin_url: profileData.linkedin_url,
-          cv_url: profileData.cv_url,
-          university: profileData.university,
-          country: profileData.country,
-          bio: profileData.bio
-        })
-      });
+ const handleSaveProfile = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch('http://localhost:5000/api/teacher/me', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      // ✅ أرسل الحقول الموجودة في الـ Schema فقط
+      body: JSON.stringify({
+        full_name: profileData.full_name,
+        phone: profileData.phone,
+        specialization: profileData.specialization,
+        qualifications: profileData.qualifications,
+        years_experince: Number(profileData.years_experince) || 0,
+        linkedin_url: profileData.linkedin_url,
+        cv_url: profileData.cv_url
+      })
+    });
 
-      if (res.ok) {
-        alert("Profile Updated Successfully!");
-        setIsEditingProfile(false);
-        setRefresh(r => r + 1);
-      } else {
-        alert("Error updating profile");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Server Error");
+    if (res.ok) {
+      alert("Profile Updated Successfully!");
+      setIsEditingProfile(false);
+      setRefresh(r => r + 1);
+    } else {
+      alert("Error updating profile");
     }
-  };
-
+  } catch (error) {
+    console.error(error);
+    alert("Server Error");
+  }
+};
   const handleAddCourse = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -631,11 +618,7 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                         <div className="flex-1 mb-2 text-center md:text-left">
                           <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">{profileData.full_name || emailName}</h2>
                           <p className="text-xl text-primary-600 dark:text-primary-400 font-medium mt-1">{profileData.specialization}</p>
-                          <div className="flex flex-col md:flex-row items-center gap-4 mt-3 text-gray-600 dark:text-slate-400 text-sm">
-                            <span className="flex items-center gap-1"><MapPin size={16} className="text-primary-500" /> {profileData.university}, {profileData.country}</span>
-                            <span className="hidden md:inline-block w-1 h-1 bg-gray-400 rounded-full"></span>
-                            <span className="flex items-center gap-1"><Calendar size={16} className="text-primary-500" /> {profileData.qualifications}</span>
-                          </div>
+
                         </div>
 
                         <div className="hidden md:flex gap-4 mb-4">
@@ -644,8 +627,8 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                             <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Courses</p>
                           </div>
                           <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 text-center min-w-[100px]">
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{interests.length}</p>
-                            <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Interests</p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{students.length}</p>
+                            <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Students</p>
                           </div>
                         </div>
                       </div>
@@ -657,30 +640,34 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                               <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"><FileText size={20} /></div>
                               About Me
                             </h3>
-                            <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">{profileData.bio || "No bio added yet."}</p>
+                            <p className="text-gray-600 dark:text-slate-400 leading-8 text-lg">No bio added yet.</p>
                           </section>
 
                           <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
                             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
                               <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"><GraduationCap size={20} /></div>
-                              Education & Details
+                              Professional Details
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
                               <div>
-                                <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">University</p>
-                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.university}</p>
+                                <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Specialization</p>
+                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.specialization || "Not specified"}</p>
                               </div>
                               <div>
                                 <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Qualifications</p>
-                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.qualifications}</p>
+                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.qualifications || "Not specified"}</p>
                               </div>
                               <div>
                                 <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Years of Experience</p>
-                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.years_experince}</p>
+                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.years_experince || 0} years</p>
                               </div>
                               <div>
-                                <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Graduation Year</p>
-                                <p className="text-lg font-medium text-slate-800 dark:text-slate-200">{profileData.gradYear}</p>
+                                <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">LinkedIn</p>
+                                {profileData.linkedin_url ? (
+                                  <a href={profileData.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-lg font-medium text-blue-600 hover:underline">View Profile →</a>
+                                ) : (
+                                  <p className="text-lg font-medium text-slate-800 dark:text-slate-200">Not added</p>
+                                )}
                               </div>
                             </div>
                           </section>
@@ -701,37 +688,33 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                                 <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"><Phone size={20} /></div>
                                 <div>
                                   <p className="text-xs text-gray-500 font-bold uppercase">Phone</p>
-                                  <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.phone}</p>
+                                  <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.phone || "Not added"}</p>
                                 </div>
                               </div>
                               <div className="flex items-start gap-4">
                                 <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400"><Globe size={20} /></div>
                                 <div>
                                   <p className="text-xs text-gray-500 font-bold uppercase">LinkedIn</p>
-                                  <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.linkedin_url}</p>
+                                  {profileData.linkedin_url ? (
+                                    <a href={profileData.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">{profileData.linkedin_url}</a>
+                                  ) : (
+                                    <p className="text-slate-700 dark:text-slate-300 font-medium">Not added</p>
+                                  )}
                                 </div>
                               </div>
-                              <div className="flex items-start gap-4">
-                                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"><MapPin size={20} /></div>
-                                <div>
-                                  <p className="text-xs text-gray-500 font-bold uppercase">Country</p>
-                                  <p className="text-slate-700 dark:text-slate-300 font-medium">{profileData.country}</p>
+                              {profileData.cv_url && (
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"><FileText size={20} /></div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 font-bold uppercase">CV</p>
+                                    <a href={profileData.cv_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">View CV →</a>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           </section>
 
-                          <section className={`p-8 rounded-2xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Brain size={18} className="text-primary-500" /> Interests</h3>
-                            <div className="flex flex-wrap gap-2">
-                              {interests.map(interest => (
-                                <span key={interest} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300 border border-primary-100 dark:border-primary-800">
-                                  {interest}
-                                </span>
-                              ))}
-                              {interests.length === 0 && <p className="text-sm text-gray-400 italic">No interests selected yet.</p>}
-                            </div>
-                          </section>
+
                         </div>
                       </div>
                     </div>
@@ -746,7 +729,7 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                         <div className="flex items-center justify-between mb-10 border-b border-gray-100 dark:border-slate-700 pb-6">
                           <div>
                             <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Edit Profile</h2>
-                            <p className="text-sm text-gray-500 mt-1">Update your personal information and preferences.</p>
+                            <p className="text-sm text-gray-500 mt-1">Update your personal information.</p>
                           </div>
                           <div className="flex gap-3">
                             <button
@@ -775,24 +758,7 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                               </button>
                             </div>
 
-                            <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-gray-50 border-gray-100'}`}>
-                              <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white"><Brain size={18} className="text-primary-600" /> My Interests</h3>
-                              <div className="flex flex-wrap gap-2">
-                                {interestOptions.map(interest => (
-                                  <button
-                                    key={interest}
-                                    onClick={() => handleInterestToggle(interest)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${
-                                      interests.includes(interest)
-                                        ? 'bg-primary-600 text-white border-primary-600 shadow-md'
-                                        : 'bg-white dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 hover:border-primary-600 hover:text-primary-600'
-                                    }`}
-                                  >
-                                    {interest}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
+
                           </div>
 
                           <div className="lg:col-span-2 space-y-8">
@@ -816,30 +782,20 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date of Birth</label>
-                                  <input
-                                    type="date"
-                                    value={profileData.dob}
-                                    onChange={(e) => setProfileData({ ...profileData, dob: e.target.value })}
-                                    className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
-                                  />
-                                </div>
-                                <div className="md:col-span-2">
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country</label>
-                                  <select
-                                    value={profileData.country}
-                                    onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
-                                    className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
-                                  >
-                                    <option value="">Select Country</option>
-                                    <option>Syria</option><option>Jordan</option><option>UAE</option><option>Saudi Arabia</option><option>USA</option>
-                                  </select>
-                                </div>
-                                <div className="md:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn URL</label>
                                   <input
                                     value={profileData.linkedin_url}
                                     onChange={(e) => setProfileData({ ...profileData, linkedin_url: e.target.value })}
+                                    placeholder="https://linkedin.com/in/..."
+                                    className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
+                                  />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CV URL</label>
+                                  <input
+                                    value={profileData.cv_url}
+                                    onChange={(e) => setProfileData({ ...profileData, cv_url: e.target.value })}
+                                    placeholder="https://..."
                                     className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
                                   />
                                 </div>
@@ -847,16 +803,8 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                             </div>
 
                             <div>
-                              <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Education & Professional</h4>
+                              <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">Professional Information</h4>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">University / Institution</label>
-                                  <input
-                                    value={profileData.university}
-                                    onChange={(e) => setProfileData({ ...profileData, university: e.target.value })}
-                                    className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
-                                  />
-                                </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Specialization</label>
                                   <input
@@ -877,31 +825,13 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Years of Experience</label>
                                   <input
                                     type="number"
+                                    min="0"
                                     value={profileData.years_experince}
                                     onChange={(e) => setProfileData({ ...profileData, years_experince: e.target.value })}
                                     className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
                                   />
                                 </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Graduation Year</label>
-                                  <input
-                                    type="number"
-                                    value={profileData.gradYear}
-                                    onChange={(e) => setProfileData({ ...profileData, gradYear: e.target.value })}
-                                    className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
-                                  />
-                                </div>
                               </div>
-                            </div>
-
-                            <div>
-                              <h4 className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-4">About Me</h4>
-                              <textarea
-                                rows="4"
-                                value={profileData.bio}
-                                onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary-500/50 outline-none transition-all ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 focus:border-primary-500'}`}
-                              ></textarea>
                             </div>
                           </div>
                         </div>
@@ -1283,7 +1213,7 @@ const [editNewVideos, setEditNewVideos] = useState([]);
                   {exams.map(exam => (
                     <div key={exam._id} className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                       <h3 className="font-bold text-lg mb-1">{exam.title}</h3>
-                      <p className="text-sm text-gray-500 mb-4">{exam.questions?.length || 0} Questions</p>
+                     <p className="text-sm text-gray-500 mb-4">{exam.questionsCount || 0} Questions</p>
                       <div className="flex justify-between items-center border-t pt-3 dark:border-slate-700">
                         <span className="text-xs text-gray-400">Passing: <span className="font-bold text-green-500">{exam.passing_score || 50}%</span></span>
                         <span className="text-xs text-gray-400">Course: <span className="font-bold text-blue-500">{courses.find(c => c._id === exam.course)?.title || 'N/A'}</span></span>
